@@ -42,9 +42,8 @@ def main():
     args = parse_arguments()
 
     if not args.local:
-        repo_question = inquirer.Text('user_repo', message="GitHub repository (user/repo)", validate=user_repo_validation, default='idsudd/derco-cjourney'),             
+        repo_question = inquirer.Text('user_repo', message="GitHub repository (user/repo)", validate=user_repo_validation),             
         user_repo = inquirer.prompt(repo_question)['user_repo']
-        # user_n_repo = input('GitHub repository: ') or 'idsudd/fic-trips-and-ods'
         user, repo = user_repo.split('/')
         
         branches = utils.get_branches(user, repo, github_token)
