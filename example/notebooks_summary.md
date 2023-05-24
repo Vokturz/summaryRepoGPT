@@ -1,0 +1,12 @@
+> This summary was obtained running summary_repo over `donnemartin/data-science-ipython-notebooks` for all the notebooks inside `scipy` folder.
+
+# data-science-ipython-notebooks
+
+This repository contains a collection of data science IPython notebooks that explore various topics related to statistics and data analysis. It includes notebooks that explore effect size, test hypotheses, and generate sampling distributions. The notebooks use the `scipy` library to compute statistics and visualize data.
+
+Notebooks info:
+
+**scipy** folder:
+- `effect_size.ipynb`: This code is used to explore statistics that quantify effect size by looking at the difference in height between men and women. It takes data from the Behavioral Risk Factor Surveillance System (BRFSS) to estimate the mean and standard deviation of height in cm for adult women and men in the U.S. The code then uses `scipy.stats.norm` to represent the distributions and creates a function to evaluate the normal (Gaussian) probability density function (PDF). It also creates a function to plot the PDFs and compute overlap and superiority. Finally, it computes Cohen's d and a relative difference to quantify the difference between the distributions. The input files are the data from the BRFSS and the output is a visualization of the PDFs and the computed statistics.
+- `hypothesis.ipynb`: This Jupyter Notebook is used to test a hypothesis by using permutation. It takes data from an input file and uses it to create a model of the null hypothesis. It then runs the model and computes the test statistic. The output is a p-value which is used to determine if the difference between the groups is statistically significant.
+- `sampling.ipynb`: This code is used to generate a class called `Resampler` which is used to compute sampling distributions. It takes in a sample and an optional xlim parameter and stores the sample and its length. It then has methods to generate a new sample by choosing from the original sample with replacement, compute a sample statistic, compute sample statistics for many experiments, and plot the sample statistics. It also has a function to instantiate a `Resampler` and run it. Finally, it has an exercise to write a new class called `StdResampler` that inherits from `Resampler` and overrides `sample_stat` so it computes the standard deviation of the resampled data.
