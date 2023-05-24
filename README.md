@@ -15,9 +15,19 @@ options:
                         To use a preferred model (OpenAI, FakeLLM for testing, GPT4ALL)
 ```
 
-If no local repo is passed, then it will ask for a repo and branch. The 
+If no local repo is passed, then it will ask for a repo and branch. All repo all download in the folder `repositories`.
 
 By default the model runs with model `FakeLLM`, i.e., it generates a fake summary. To change that use the flag `--model OpenAI`. Currently `GPT4ALL` is not working
+
+ -----
+## Example
+![Example](./example/example_usage.gif)
+
+In this example the repo [donnemartin/data-science-ipython-notebooks](https://github.com/donnemartin/data-science-ipython-notebooks) is clonned and then the `scipy` folder is selected to summarize. Each notebooks is summarized as 
+- `00_notebook0.ipynb`: This notebook...
+- `01_notebook1.ipynb`: This notebook...
+
+and then the program obtain a final explanation of the repo (or folder in this case) which is wrote in [`notebooks_summary.md`](./example/notebooks_summary.md) file.
 
 -----
 ## Environment variables
