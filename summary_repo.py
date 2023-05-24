@@ -99,11 +99,14 @@ def main():
     llm, results_pf = utils.retrieve_summary(documents, embeddings, 
                                              model_type=args.model, print_token_n_costs=True)
     summary_notebooks = utils.format_summary(results_pf, repo_name)
+    
+    print('Summarizing the repo..')
     summary_repo = utils.summary_repo(llm, summary_notebooks, repo_name, 
                                       model_type=args.model, print_token_n_costs=True)
     readme = utils.create_readme(repo_name, summary_notebooks, summary_repo)
     with open(f'{source_directory}/notebooks_summary.md', 'w') as f:
         f.write(readme)
+    print(f'Markdown file saved on {source_directory}/notebooks_summary.md!')
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description='A description')
