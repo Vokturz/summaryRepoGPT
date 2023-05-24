@@ -80,7 +80,8 @@ def main():
         ipynb_count.append(f' {t} files from {p}')
     q = [inquirer.Checkbox("selected_parent_folders", message="Select .ipynb folder files to summarize",
                            choices=tuple(zip(ipynb_count, unique_parent_folders )),
-                           default=unique_parent_folders)]
+                           #default=unique_parent_folders
+                           )]
     answers = inquirer.prompt(q)
     selected_parent_folders = answers["selected_parent_folders"]
     if len(selected_parent_folders) == 0:
