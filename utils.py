@@ -3,7 +3,7 @@ from git import (Repo, Git)
 import nbformat
 import glob
 from dotenv import load_dotenv
-from typing import List, Any
+from typing import (List, Dict, Optional, Tuple)
 from langchain.docstore.document import Document
 import requests
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -11,9 +11,11 @@ from langchain.docstore.document import Document
 from langchain.chains import RetrievalQA
 from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
 from langchain.vectorstores import Chroma
-from langchain.llms import GPT4All, OpenAI
+from langchain.llms import (GPT4All, OpenAI)
 from langchain.callbacks import get_openai_callback
 from langchain.llms.fake import FakeListLLM
+from langchain.embeddings.base import Embeddings
+from langchain.llms.base import BaseLLM
 load_dotenv()
 
 model_path = os.environ.get("GPT4_ALL_MODEL")
@@ -39,12 +41,12 @@ def load_notebook(file_path: str) -> Document:
     return doc
 
 
-def load_multiple_notebooks(source_dir: str, exclude_pattern='[!_]') -> List[Document]:
+def load_multiple_notebooks(source_dir: str, exclude_pattern: str='[!_]') -> List[Document]:
     ipynb_files = glob.glob(os.path.join(source_dir, f"{exclude_pattern}*.ipynb"), recursive=True)
     all_files = ipynb_files
     return [load_notebook(file_path) for file_path in all_files]
 
-def create_readme(repo_name, summary_notebooks, summary_repo):
+def create_readme(repo_name: str, summary_notebooks: str, summary_repo: str) -> str:
     markdown_file = ""
     markdown_file += f"# {repo_name}\n"
     markdown_file += f'{summary_repo}\n\nNotebooks info:\n'
@@ -52,7 +54,7 @@ def create_readme(repo_name, summary_notebooks, summary_repo):
     return markdown_file
 
 
-def format_summary(summary_notebooks_results, repo_name):
+def format_summary(summary_notebooks_results: Dict[str, Dict[str, str]], repo_name: str) -> str:
     summary_notebooks = '\n'
     for parent_folder in summary_notebooks_results.keys():
         llm_results = list(summary_notebooks_results[parent_folder].values())
@@ -62,7 +64,8 @@ def format_summary(summary_notebooks_results, repo_name):
     return summary_notebooks
 
 
-def clone_repository(repo_username, repo_name, branch, token=None):
+def clone_repository(repo_username: str, repo_name: str,
+                      branch: str, token: Optional[str]=None) -> str:
     git_url = f'https://github.com/{repo_username}/{repo_name}'
     g = Git(repo_name)
     if token:
@@ -84,7 +87,7 @@ def clone_repository(repo_username, repo_name, branch, token=None):
             print(f'Repository {repo_name} ({actual_branch}) already exists')
     return repo_folder
 
-def get_branches(user, repo, token):
+def get_branches(user: str, repo: str, token: Optional[str]=None) -> List[str]:
     headers = {'Accept': 'application/vnd.github+json'}
     if token:
         headers['Authorization'] = f'token {token}'
@@ -95,7 +98,7 @@ def get_branches(user, repo, token):
     return branches
 
 
-def generate_fake_responses(documents):
+def generate_fake_responses(documents: List[Document]) -> Dict[str, str]:
     responses = {}
     import random
     for doc in documents:
@@ -105,7 +108,8 @@ def generate_fake_responses(documents):
     return responses
 
 
-def retrieve_summary(documents, embeddings, model_type='FakeLLM', print_token_n_costs=False):
+def retrieve_summary(documents: List[Document], embeddings: Embeddings,
+                      model_type: str='FakeLLM', print_token_n_costs: bool=False) -> Tuple[BaseLLM,  Dict[str, Dict[str, str]]]:
     if model_type == 'FakeLLM':
         responses = generate_fake_responses(documents)
     print_token_n_costs=True
@@ -150,7 +154,8 @@ def retrieve_summary(documents, embeddings, model_type='FakeLLM', print_token_n_
         print(f'Final cost (USD): ${total_cost}\n')
     return llm, results_parent_folder_dict
 
-def summary_repo(llm, summary_notebooks, repo_name, model_type='FakeLLM', print_token_n_costs=False):
+def summary_repo(llm: BaseLLM, summary_notebooks: str, repo_name: str,
+                  model_type: str='FakeLLM', print_token_n_costs: bool=False) -> str:
 
     query_repo = f"""The following is the summary of a list of notebooks used in a GitHub repository called `{repo_name}`:
 {summary_notebooks}
