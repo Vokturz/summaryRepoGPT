@@ -111,15 +111,16 @@ def generate_fake_responses(documents: List[Document]) -> Dict[str, str]:
 
 
 def retrieve_summary(documents: List[Document], embeddings: Embeddings,
-                      model_type: str='FakeLLM', print_token_n_costs: bool=False) -> Tuple[BaseLLM,  Dict[str, Dict[str, str]]]:
+                      model_type: str='FakeLLM', chunk_size: int=2048,
+                      chunk_overlap: int=128, print_token_n_costs: bool=False) -> Tuple[BaseLLM,  Dict[str, Dict[str, str]]]:
     if model_type == 'FakeLLM':
         responses = generate_fake_responses(documents)
     print_token_n_costs=True
     total_cost = 0
     results_parent_folder_dict={}
     for doc in documents:
-        text_splitter = RecursiveCharacterTextSplitter(chunk_size=2048,
-                                                chunk_overlap=128,
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size,
+                                                chunk_overlap=chunk_overlap,
                                                 separators =  ["\n\n", "\n"])
         doc_split = text_splitter.split_documents([doc])
         search_index = Chroma.from_documents(doc_split, embeddings,)
