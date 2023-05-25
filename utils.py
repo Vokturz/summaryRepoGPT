@@ -118,6 +118,19 @@ def retrieve_summary(documents: List[Document], embeddings: Embeddings,
     print_token_n_costs=True
     total_cost = 0
     results_parent_folder_dict={}
+
+
+    if model_type == 'GPT4ALL':
+        callbacks = [StreamingStdOutCallbackHandler()]
+        llm = GPT4All(model=model_path, n_ctx=4096, backend='gptj', callbacks=callbacks, verbose=False)
+        chunk_size = 500
+        chunk_overlap = 50
+    elif model_type == 'OpenAI':
+        llm = OpenAI(temperature=0, max_tokens=500)
+    elif model_type == 'FakeLLM':
+        llm = FakeListLLM(responses=list(responses.values()))
+    else:
+        raise ValueError('incorrect model_type (only supports OpenAI|GPT4ALL|FakeLLM))')
     for doc in documents:
         text_splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size,
                                                 chunk_overlap=chunk_overlap,
@@ -129,16 +142,9 @@ def retrieve_summary(documents: List[Document], embeddings: Embeddings,
         parent_folder = doc.metadata['parent_folder']
         if parent_folder not in results_parent_folder_dict.keys():
               results_parent_folder_dict[parent_folder] = {}
-        callbacks = [StreamingStdOutCallbackHandler()]
-        if model_type == 'GPT4ALL':
-            llm = GPT4All(model=model_path, n_ctx=1000, backend='gptj', callbacks=callbacks, verbose=False)
-        elif model_type == 'OpenAI':
-            llm = OpenAI(temperature=0, max_tokens=500)
-        elif model_type == 'FakeLLM':
-            llm = FakeListLLM(responses=list(responses.values()))
         query = f"The following code comes from the {notebook_name} Jupyter Notebook. Your task is to explain for what this code is used for.\
-            Describe this using just one paragraph, includig the location of the input and output files from the notebook.\
-            Use a bullet point for you response, which must be in markdown. You must dont add more information. Here is the initial part of your answer:\
+            Describe this using just one paragraph, including the location of the input and output files from the notebook.\
+            Use a bullet point for your response, which must be in markdown. You must dont add more information. Here is the initial part of your answer:\
             - `{notebook_name}`: "
         qa = RetrievalQA.from_chain_type(llm=llm, chain_type="stuff", retriever=retriever)
         print(f'Working on {parent_folder}/{notebook_name}..')
@@ -151,6 +157,7 @@ def retrieve_summary(documents: List[Document], embeddings: Embeddings,
             res = {'result' : responses[notebook_name]}
         else:
             res = qa(query)
+
         results_parent_folder_dict[parent_folder][notebook_name] = res['result']
         
     if total_cost > 0:
