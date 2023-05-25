@@ -19,8 +19,51 @@ load_dotenv()
 
 model_name = os.environ.get("GPT4ALL_MODEL")
 
+def clone_repository(user: str, repo: str, branch: str, token: Optional[str]=None) -> str:
+    """Clone the branch of a GitHub repository using the user and repo names"""
+
+    git_url = f'https://github.com/{user}/{repo}'
+    g = Git(repo)
+    if token:
+        git_url = git_url.replace('https://', f'https://{token}@')
+
+    repo_folder = 'repositories/' +repo
+    if not os.path.exists(repo_folder):
+        os.makedirs(repo_folder)
+
+    try:
+        repo = Repo.clone_from(git_url, repo_folder, branch=branch)
+    except:
+        repo = Repo(repo_folder)
+        actual_branch = repo.active_branch.name
+        if branch != repo.active_branch.name:
+            repo.git.checkout(branch)
+            print(f'Checkout {actual_branch}->{branch}')
+        else:
+            print(f'Repository {repo} ({actual_branch}) already exists')
+    return repo_folder
+
+
+def get_branches(user: str, repo: str, token: Optional[str]=None) -> List[str]:
+    """Get all branches of a GitHub repository"""
+
+    headers = {'Accept': 'application/vnd.github+json'}
+    if token:
+        headers['Authorization'] = f'token {token}'
+
+    response = requests.get(f'https://api.github.com/repos/{user}/{repo}/branches', headers=headers)
+
+    branches = [branch['name'] for branch in response.json()]
+    return branches
+
 
 def load_notebook(file_path: str) -> Document:
+    """Load a .ipynb file as a langchain Document.
+
+    It is similar to NotebookLoader but concatenates all code cells, markdown
+    cells are added as comments to the code. This produces a final document
+    with less characters.
+    """
     if file_path.endswith('.ipynb'):
         with open(file_path) as fp:
             notebook = nbformat.read(fp, nbformat.NO_CONVERT)
@@ -43,63 +86,16 @@ def load_notebook(file_path: str) -> Document:
 
 
 def load_multiple_notebooks(source_dir: str, exclude_pattern: str='[!_]') -> List[Document]:
+    """Convert all notebooks from a source_dir to langchain documents.
+    It excludes all files starting with '_'.
+    """
     ipynb_files = glob.glob(os.path.join(source_dir, f"{exclude_pattern}*.ipynb"), recursive=True)
     all_files = ipynb_files
     return [load_notebook(file_path) for file_path in all_files]
 
-def create_readme(repo_name: str, summary_notebooks: str, summary_repo: str) -> str:
-    markdown_file = ""
-    markdown_file += f"# {repo_name}\n"
-    markdown_file += f'{summary_repo}\n\nNotebooks info:\n'
-    markdown_file += f'{summary_notebooks}'
-    return markdown_file
-
-
-def format_summary(summary_notebooks_results: Dict[str, Dict[str, str]], repo_name: str) -> str:
-    summary_notebooks = '\n'
-    for parent_folder in summary_notebooks_results.keys():
-        llm_results = list(summary_notebooks_results[parent_folder].values())
-        parent_folder = parent_folder.replace(f'{repo_name}/', '')
-        summary_notebooks += f'**{parent_folder}** folder:'
-        summary_notebooks += ''.join(llm_results) + '\n\n'
-    return summary_notebooks
-
-
-def clone_repository(repo_username: str, repo_name: str,
-                      branch: str, token: Optional[str]=None) -> str:
-    git_url = f'https://github.com/{repo_username}/{repo_name}'
-    g = Git(repo_name)
-    if token:
-        git_url = git_url.replace('https://', f'https://{token}@')
-
-    repo_folder = 'repositories/' +repo_name
-    if not os.path.exists(repo_folder):
-        os.makedirs(repo_folder)
-
-    try:
-        repo = Repo.clone_from(git_url, repo_folder, branch=branch)
-    except:
-        repo = Repo(repo_folder)
-        actual_branch = repo.active_branch.name
-        if branch != repo.active_branch.name:
-            repo.git.checkout(branch)
-            print(f'Checkout {actual_branch}->{branch}')
-        else:
-            print(f'Repository {repo_name} ({actual_branch}) already exists')
-    return repo_folder
-
-def get_branches(user: str, repo: str, token: Optional[str]=None) -> List[str]:
-    headers = {'Accept': 'application/vnd.github+json'}
-    if token:
-        headers['Authorization'] = f'token {token}'
-
-    response = requests.get(f'https://api.github.com/repos/{user}/{repo}/branches', headers=headers)
-
-    branches = [branch['name'] for branch in response.json()]
-    return branches
-
 
 def generate_fake_responses(documents: List[Document]) -> Dict[str, str]:
+    """Generate fake responses for FakeLLM"""
     responses = {}
     import random
     for doc in documents:
@@ -110,16 +106,23 @@ def generate_fake_responses(documents: List[Document]) -> Dict[str, str]:
 
 
 def retrieve_summary(documents: List[Document], embeddings: Embeddings, context: Optional[str]='',
-                      model_type: str='FakeLLM', chunk_size: int=2048,
-                      chunk_overlap: int=128, print_token_n_costs: bool=False) -> Tuple[BaseLLM,  Dict[str, Dict[str, str]]]:
-    
+                      model_type: str='FakeLLM', chunk_size: int=2048, chunk_overlap: int=128, 
+                      n_threads: int=4, print_token_n_costs: bool=False) -> Tuple[BaseLLM,  Dict[str, Dict[str, str]]]:
+    """Obtain the summary of each document using the given LLM.
+
+    It accepts a context string to include extra information of the document
+    (such as meaning of acronyms, etc).
+    chunk_size and chunk_overlap are used to split the document.
+    print_token_n_costs is used to include the number of tokens and price per
+    query when using OpenAI.
+    """
     total_cost = 0
     results_parent_folder_dict={}
     if model_type == 'GPT4ALL':
         callbacks = [StreamingStdOutCallbackHandler()]
-        llm = GPT4All(model=model_name, temp=0, callbacks=callbacks, verbose=False)
-        chunk_size = 500
-        chunk_overlap = 50
+        llm = GPT4All(model=model_name, temp=0, n_threads=n_threads, callbacks=callbacks, verbose=False)
+        #chunk_size = 500
+        #chunk_overlap = 50
     elif model_type == 'OpenAI':
         llm = OpenAI(temperature=0, max_tokens=500)
     elif model_type == 'FakeLLM':
@@ -162,9 +165,31 @@ def retrieve_summary(documents: List[Document], embeddings: Embeddings, context:
         print(f'Final cost (USD): ${total_cost}\n')
     return llm, results_parent_folder_dict
 
+
+def format_summary(summary_notebooks_results: Dict[str, Dict[str, str]], repo_name: str) -> str:
+    """Given the dict of results obtained from retrieve_summary, it creates a
+    string formatting the results for each parent_folder.
+    The output looks like this:
+        **<parent_folder>** folder:
+        - 00_notebook.ipynb : ...
+    and so on.
+    """
+    summary_notebooks = '\n'
+    for parent_folder in summary_notebooks_results.keys():
+        llm_results = list(summary_notebooks_results[parent_folder].values())
+        parent_folder = parent_folder.replace(f'{repo_name}/', '')
+        summary_notebooks += f'**{parent_folder}** folder:'
+        summary_notebooks += ''.join(llm_results) + '\n\n'
+    return summary_notebooks
+
+
 def summary_repo(llm: BaseLLM, summary_notebooks: str, repo_name: str,
                   model_type: str='FakeLLM', print_token_n_costs: bool=False) -> str:
+    """Given a summary of notebooks, obtain a summary of the full repository
 
+    print_token_n_costs is used to include the number of tokens and price of
+    the query when using OpenAI.
+    """
     query_repo = f"""The following is the summary of a list of notebooks used in a GitHub repository called `{repo_name}`:
 {summary_notebooks}
 What do you think is this repo used for? Don't explain me each notebook, just give me a summary of the repository that could be added to a readme.md file."""
@@ -178,3 +203,21 @@ What do you think is this repo used for? Don't explain me each notebook, just gi
     else:
         summary_repo = llm(query_repo)
     return summary_repo
+
+
+def create_readme(repo_name: str, summary_notebooks: str, summary_repo: str) -> str:
+    """Add the summary of the repo and notebooks to one string.
+    The output looks like this:
+    # <repo_name>
+    <summary of the repository>
+
+    Notebooks info:
+    **<parent_folder>** folder:
+        - 00_notebook.ipynb : ...
+    and so on.
+    """
+    markdown_file = ""
+    markdown_file += f"# {repo_name}\n"
+    markdown_file += f'{summary_repo}\n\nNotebooks info:\n'
+    markdown_file += f'{summary_notebooks}'
+    return markdown_file
