@@ -22,15 +22,16 @@ def main():
     else:
         embeddings = HuggingFaceEmbeddings(model_name=embeddings_model_name)
 
-    llm, results_pf = utils.retrieve_summary(documents, embeddings, 
+    llm, results_pf = utils.retrieve_summary(documents, embeddings, n_threads=args.n_threads,
                                              model_type=args.model, print_token_n_costs=True)
     print(results_pf)
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description='A description')
-    parser.add_argument("--file", "-f", help='notebook path', required=True)
+    parser.add_argument("--file", "-f", help='Notebook path', required=True)
     parser.add_argument("--model", "-m", default='FakeLLM', help='To use a preferred model (OpenAI, FakeLLM for testing, GPT4ALL)')
-
+    parser.add_argument("--n-threads", "-t", type=int, default=4, help='Number of threads to use, only if model==GPT4ALL')
+    
     return parser.parse_args()
 
 if __name__ == "__main__":

@@ -102,7 +102,7 @@ def main():
     else:
         embeddings = HuggingFaceEmbeddings(model_name=embeddings_model_name)
 
-    llm, results_pf = utils.retrieve_summary(documents, embeddings, context=context,
+    llm, results_pf = utils.retrieve_summary(documents, embeddings, context=context, n_threads=args.n_threads,
                                              model_type=args.model, print_token_n_costs=True)
     summary_notebooks = utils.format_summary(results_pf, repo_name)
     
@@ -118,6 +118,7 @@ def parse_arguments():
     parser = argparse.ArgumentParser(description='A description')
     parser.add_argument("--local", "-l", help='If the repository has been already downloaded, you can pass the folder path')
     parser.add_argument("--model", "-m", default='FakeLLM', help='To use a preferred model (OpenAI, FakeLLM for testing, GPT4ALL)')
+    parser.add_argument("--n-threads", "-t", type=int, default=4, help='Number of threads to use, only if model==GPT4ALL')
 
     return parser.parse_args()
 
