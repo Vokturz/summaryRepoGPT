@@ -42,6 +42,5 @@ EMBEDDINGS_MODEL=all-MiniLM-L6-v2
 
 # To do list
 - [x] Make GPT4ALL work -> it require reduce the size of the chunks in the splitter
-- [ ] Write comments explaining functions inside `utils`
 - [ ] Improve splitter of notebooks (prioritizing split by cells is a good idea)
 - [ ] Add more files to summarize
