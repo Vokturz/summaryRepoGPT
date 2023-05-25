@@ -1,12 +1,6 @@
-import inquirer
-import requests
 import argparse
 import os
 from dotenv import load_dotenv
-
-
-import glob
-import numpy as np
 from langchain.embeddings import (HuggingFaceEmbeddings, FakeEmbeddings)
 import utils
 load_dotenv()
