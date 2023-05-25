@@ -169,7 +169,7 @@ def summary_repo(llm: BaseLLM, summary_notebooks: str, repo_name: str,
 
     query_repo = f"""The following is the summary of a list of notebooks used in a GitHub repository called `{repo_name}`:
 {summary_notebooks}
-What do you think is this repo used for? Don't explain me each notebook, just give me a summary of the repository that could be add to a readme.md file."""
+What do you think is this repo used for? Don't explain me each notebook, just give me a summary of the repository that could be added to a readme.md file."""
 
     if model_type=='OpenAI' and print_token_n_costs:
         with get_openai_callback() as cb:
