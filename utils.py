@@ -4,7 +4,6 @@ import nbformat
 import glob
 from dotenv import load_dotenv
 from typing import (List, Dict, Optional, Tuple)
-from langchain.docstore.document import Document
 import requests
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.docstore.document import Document
@@ -18,7 +17,7 @@ from langchain.embeddings.base import Embeddings
 from langchain.llms.base import BaseLLM
 load_dotenv()
 
-model_path = os.environ.get("GPT4_ALL_MODEL")
+model_name = os.environ.get("GPT4ALL_MODEL")
 
 
 def load_notebook(file_path: str) -> Document:
@@ -118,7 +117,7 @@ def retrieve_summary(documents: List[Document], embeddings: Embeddings, context:
     results_parent_folder_dict={}
     if model_type == 'GPT4ALL':
         callbacks = [StreamingStdOutCallbackHandler()]
-        llm = GPT4All(model=model_path, n_ctx=4096, backend='gptj', callbacks=callbacks, verbose=False)
+        llm = GPT4All(model=model_name, temp=0, callbacks=callbacks, verbose=False)
         chunk_size = 500
         chunk_overlap = 50
     elif model_type == 'OpenAI':
