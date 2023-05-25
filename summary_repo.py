@@ -93,13 +93,16 @@ def main():
     
     print(f"Loaded {len(documents)} documents from {source_directory}")
 
+    context_q = inquirer.Text('context', message="(Optional) Add some context (as meaning of acronyms, etc)", ),             
+    context = inquirer.prompt(context_q)['context']
+
     print(f'Loading embeddings from {embeddings_model_name}..')
     if args.model == 'FakeLLM':
         embeddings = FakeEmbeddings(size=4096)
     else:
         embeddings = HuggingFaceEmbeddings(model_name=embeddings_model_name)
 
-    llm, results_pf = utils.retrieve_summary(documents, embeddings, 
+    llm, results_pf = utils.retrieve_summary(documents, embeddings, context=context,
                                              model_type=args.model, print_token_n_costs=True)
     summary_notebooks = utils.format_summary(results_pf, repo_name)
     

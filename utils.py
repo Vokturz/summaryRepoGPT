@@ -110,16 +110,12 @@ def generate_fake_responses(documents: List[Document]) -> Dict[str, str]:
     return responses
 
 
-def retrieve_summary(documents: List[Document], embeddings: Embeddings,
+def retrieve_summary(documents: List[Document], embeddings: Embeddings, context: Optional[str]='',
                       model_type: str='FakeLLM', chunk_size: int=2048,
                       chunk_overlap: int=128, print_token_n_costs: bool=False) -> Tuple[BaseLLM,  Dict[str, Dict[str, str]]]:
-    if model_type == 'FakeLLM':
-        responses = generate_fake_responses(documents)
-    print_token_n_costs=True
+    
     total_cost = 0
     results_parent_folder_dict={}
-
-
     if model_type == 'GPT4ALL':
         callbacks = [StreamingStdOutCallbackHandler()]
         llm = GPT4All(model=model_path, n_ctx=4096, backend='gptj', callbacks=callbacks, verbose=False)
@@ -128,6 +124,7 @@ def retrieve_summary(documents: List[Document], embeddings: Embeddings,
     elif model_type == 'OpenAI':
         llm = OpenAI(temperature=0, max_tokens=500)
     elif model_type == 'FakeLLM':
+        responses = generate_fake_responses(documents)
         llm = FakeListLLM(responses=list(responses.values()))
     else:
         raise ValueError('incorrect model_type (only supports OpenAI|GPT4ALL|FakeLLM))')
@@ -140,10 +137,12 @@ def retrieve_summary(documents: List[Document], embeddings: Embeddings,
         retriever = search_index.as_retriever()
         notebook_name = doc.metadata['source'].split('/')[-1]
         parent_folder = doc.metadata['parent_folder']
+        if context:
+            context = f"\n{context}\n"
         if parent_folder not in results_parent_folder_dict.keys():
               results_parent_folder_dict[parent_folder] = {}
-        query = f"The following code comes from the {notebook_name} Jupyter Notebook. Your task is to explain for what this code is used for.\
-            Describe this using just one paragraph, including the location of the input and output files from the notebook.\
+        query = f"The following code comes from the {notebook_name} Jupyter Notebook. Your task is to explain for what this code is used for. {context}\
+            Describe this using just one paragraph, including the location of the input and output files from the notebook if applicable. \
             Use a bullet point for your response, which must be in markdown. You must dont add more information. Here is the initial part of your answer:\
             - `{notebook_name}`: "
         qa = RetrievalQA.from_chain_type(llm=llm, chain_type="stuff", retriever=retriever)
