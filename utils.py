@@ -26,6 +26,8 @@ def load_notebook(file_path: str) -> Document:
         with open(file_path) as fp:
             notebook = nbformat.read(fp, nbformat.NO_CONVERT)
             cells = notebook['cells']
+    else:
+        raise ValueError('file_path must ends with .ipynb')
     full_source = []
     for cell in cells: 
         if cell['cell_type'] == 'markdown': # Add Markdown as comments
