@@ -36,12 +36,12 @@ Rename example.env to .env and edit the variables appropriately.
 ```
 GITHUB_TOKEN: GitHub token used to access to private repos. 
 OPENAI_API_KEY= OpenAI API key
-GPT4_ALL_MODEL= Path to a GPT4ALL model (actualy is not working)
+GPT4ALL_MODEL= GPT4ALL model name (see https://gpt4all.io/models/models.json for all models)
 EMBEDDINGS_MODEL=all-MiniLM-L6-v2
 ```
 
 # To do list
+- [x] Make GPT4ALL work -> it require reduce the size of the chunks in the splitter
 - [ ] Write comments explaining functions inside `utils`
 - [ ] Improve splitter of notebooks (prioritizing split by cells is a good idea)
-- [ ] Make GPT4ALL work -> it require reduce the size of the chunks in the splitter
 - [ ] Add more files to summarize
