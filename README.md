@@ -23,7 +23,7 @@ By default the model runs with model `FakeLLM`, i.e., it generates a fake summar
 
 ---
 
-If you to test only one notebook, you can use **summary_notebook.py**
+If you want to test only one notebook, you can use **summary_notebook.py**:
 ```
 usage: summary_notebook.py [-h] --file FILE [--model MODEL] [--n-threads N_THREADS]
 
@@ -37,6 +37,8 @@ options:
   --n-threads N_THREADS, -t N_THREADS
                         Number of threads to use, only if model==GPT4All
 ```
+
+You can check [`comparison_summary.md`](./example/comparison_summary.md) to check the usage of **summary_notebook.py** over `scipy/effect_size.ipynb` from [donnemartin/data-science-ipython-notebooks](https://github.com/donnemartin/data-science-ipython-notebooks) repo.
 
  -----
 ## Example
