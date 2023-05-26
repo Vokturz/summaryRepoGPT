@@ -39,7 +39,9 @@ def user_repo_validation(answers, current):
 
 def main():
     args = parse_arguments()
-
+    if args.model not in ["GPT4All", "OpenAI", "FakeLLM"]:
+        print(f"Incorrect model {args.model}. Models supported: OpenAI|GPT4All|FakeLLM")
+        exit()
     if not args.local:
         repo_question = inquirer.Text('user_repo', message="GitHub repository (user/repo)", validate=user_repo_validation),             
         user_repo = inquirer.prompt(repo_question)['user_repo']
@@ -93,16 +95,18 @@ def main():
     
     print(f"Loaded {len(documents)} documents from {source_directory}")
 
-    context_q = inquirer.Text('context', message="(Optional) Add some context (as meaning of acronyms, etc)", ),             
-    context = inquirer.prompt(context_q)['context']
-
-    print(f'Loading embeddings from {embeddings_model_name}..')
+    extra_context = ''
+    if args.model == 'OpenAI': # Context works only for OpenAI
+        context_q = inquirer.Text('context', message="(Optional) Add some context (as meaning of acronyms, etc)", ),             
+        extra_context = inquirer.prompt(context_q)['context']
+        
     if args.model == 'FakeLLM':
         embeddings = FakeEmbeddings(size=4096)
     else:
+        print(f'Loading embeddings from {embeddings_model_name}..')
         embeddings = HuggingFaceEmbeddings(model_name=embeddings_model_name)
 
-    llm, results_pf = utils.retrieve_summary(documents, embeddings, context=context, n_threads=args.n_threads,
+    llm, results_pf = utils.retrieve_summary(documents, embeddings, extra_context=extra_context, n_threads=args.n_threads,
                                              model_type=args.model, print_token_n_costs=True)
     summary_notebooks = utils.format_summary(results_pf, repo_name)
     
@@ -117,8 +121,8 @@ def main():
 def parse_arguments():
     parser = argparse.ArgumentParser(description='A description')
     parser.add_argument("--local", "-l", help='If the repository has been already downloaded, you can pass the folder path')
-    parser.add_argument("--model", "-m", default='FakeLLM', help='To use a preferred model (OpenAI, FakeLLM for testing, GPT4ALL)')
-    parser.add_argument("--n-threads", "-t", type=int, default=4, help='Number of threads to use, only if model==GPT4ALL')
+    parser.add_argument("--model", "-m", default='FakeLLM', help='To use a preferred model (OpenAI, FakeLLM for testing, GPT4All)')
+    parser.add_argument("--n-threads", "-t", type=int, default=4, help='Number of threads to use, only if model==GPT4All')
 
     return parser.parse_args()
 
