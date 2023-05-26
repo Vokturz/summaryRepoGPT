@@ -5,6 +5,7 @@ import glob
 from dotenv import load_dotenv
 from typing import (List, Dict, Optional, Tuple)
 import requests
+from halo import Halo
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.docstore.document import Document
 from langchain.chains import RetrievalQA
@@ -15,6 +16,7 @@ from langchain.callbacks import get_openai_callback
 from langchain.llms.fake import FakeListLLM
 from langchain.embeddings.base import Embeddings
 from langchain.llms.base import BaseLLM
+
 load_dotenv()
 
 model_name = os.environ.get("GPT4ALL_MODEL")
@@ -78,7 +80,7 @@ def load_notebook(file_path: str) -> Document:
             full_source.append('\n'.join(commented_lines))
         else:
             full_source.append(cell['source'])
-    full_source = '\n'.join(full_source)
+    full_source = '\n\n'.join(full_source)
     doc = Document(page_content=full_source)
     doc.metadata['source'] = file_path
     doc.metadata['parent_folder'] = '/'.join(file_path.split('/')[1:-1])
@@ -120,9 +122,11 @@ def retrieve_summary(documents: List[Document], embeddings: Embeddings, context:
     results_parent_folder_dict={}
     if model_type == 'GPT4ALL':
         callbacks = [StreamingStdOutCallbackHandler()]
-        llm = GPT4All(model=model_name, temp=0, n_threads=n_threads, callbacks=callbacks, verbose=False)
-        #chunk_size = 500
-        #chunk_overlap = 50
+        llm = GPT4All(model=model_name, n_ctx=2048, temp=0, n_predict=500, 
+                      n_threads=n_threads, callbacks=callbacks, verbose=False)
+        if llm.backend == 'gptj':
+            chunk_size = 500
+            chunk_overlap = 50
     elif model_type == 'OpenAI':
         llm = OpenAI(temperature=0, max_tokens=500)
     elif model_type == 'FakeLLM':
@@ -133,10 +137,10 @@ def retrieve_summary(documents: List[Document], embeddings: Embeddings, context:
     for doc in documents:
         text_splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size,
                                                 chunk_overlap=chunk_overlap,
-                                                separators =  ["\n\n", "\n"])
+                                                separators =  ["\n\n"])
         doc_split = text_splitter.split_documents([doc])
         search_index = Chroma.from_documents(doc_split, embeddings,)
-        retriever = search_index.as_retriever()
+        retriever = search_index.as_retriever(search_kwargs={"k": len(doc_split)})
         notebook_name = doc.metadata['source'].split('/')[-1]
         parent_folder = doc.metadata['parent_folder']
         if context:
@@ -148,17 +152,24 @@ def retrieve_summary(documents: List[Document], embeddings: Embeddings, context:
             Use a bullet point for your response, which must be in markdown. You must dont add more information. Here is the initial part of your answer:\
             - `{notebook_name}`: "
         qa = RetrievalQA.from_chain_type(llm=llm, chain_type="stuff", retriever=retriever)
-        print(f'Working on {parent_folder}/{notebook_name}..')
+        
+        #print(f'Working on {parent_folder}/{notebook_name}..')
+        spinner = Halo(text=f'Working on {parent_folder}/{notebook_name}..', spinner='dots')
+        spinner.start()
+        cb = None
         if model_type=='OpenAI' and print_token_n_costs:
             with get_openai_callback() as cb:
                 res = qa(query)
-                print(cb)
                 total_cost += cb.total_cost
         elif model_type == 'FakeLLM':
             res = {'result' : responses[notebook_name]}
         else:
             res = qa(query)
-
+        import time
+        spinner.stop()
+        if cb:
+            print(cb)
+        
         results_parent_folder_dict[parent_folder][notebook_name] = res['result']
         
     if total_cost > 0:
@@ -194,14 +205,19 @@ def summary_repo(llm: BaseLLM, summary_notebooks: str, repo_name: str,
 {summary_notebooks}
 What do you think is this repo used for? Don't explain me each notebook, just give me a summary of the repository that could be added to a readme.md file."""
 
+    spinner = Halo(text=f'Summarizing repo..', spinner='dots')
+    spinner.start()
+    cb = None
     if model_type=='OpenAI' and print_token_n_costs:
         with get_openai_callback() as cb:
             summary_repo = llm(query_repo)
-            print(cb)
     elif model_type == 'FakeLLM':
             summary_repo = 'This repo contains notebooks for foo'
     else:
         summary_repo = llm(query_repo)
+    spinner.stop()
+    if cb:
+        print(cb)
     return summary_repo
 
 
