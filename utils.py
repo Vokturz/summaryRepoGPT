@@ -4,6 +4,7 @@ import nbformat
 import glob
 from dotenv import load_dotenv
 from typing import (List, Dict, Optional, Tuple)
+import time
 import requests
 from halo import Halo
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -16,6 +17,7 @@ from langchain.callbacks import get_openai_callback
 from langchain.llms.fake import FakeListLLM
 from langchain.embeddings.base import Embeddings
 from langchain.llms.base import BaseLLM
+import tiktoken
 
 load_dotenv()
 
@@ -83,7 +85,10 @@ def load_notebook(file_path: str) -> Document:
     full_source = '\n\n'.join(full_source)
     doc = Document(page_content=full_source)
     doc.metadata['source'] = file_path
-    doc.metadata['parent_folder'] = '/'.join(file_path.split('/')[1:-1])
+    parent_folder = '/'.join(file_path.split('/')[1:-1])
+    if parent_folder == '':
+        parent_folder = '.'
+    doc.metadata['parent_folder'] = parent_folder
     return doc
 
 
@@ -101,61 +106,84 @@ def generate_fake_responses(documents: List[Document]) -> Dict[str, str]:
     responses = {}
     import random
     for doc in documents:
-        var = 'far' if random.randint(1,100) > 50 else 'bar'
+        var = 'foo' if random.randint(1,100) > 50 else 'bar'
         notebook_name = doc.metadata['source'].split('/')[-1]
-        responses[notebook_name] = f'\n - `{notebook_name}`: This notebooks is used for {var}'
+        responses[notebook_name] = f'\n - `{notebook_name}`: This notebooks is used for {var}.'
     return responses
 
 
-def retrieve_summary(documents: List[Document], embeddings: Embeddings, context: Optional[str]='',
-                      model_type: str='FakeLLM', chunk_size: int=2048, chunk_overlap: int=128, 
+def retrieve_summary(documents: List[Document], embeddings: Embeddings, extra_context: Optional[str]='',
+                      model_type: str='FakeLLM', chunk_size: int=2048, chunk_overlap: int=50, 
                       n_threads: int=4, print_token_n_costs: bool=False) -> Tuple[BaseLLM,  Dict[str, Dict[str, str]]]:
     """Obtain the summary of each document using the given LLM.
 
-    It accepts a context string to include extra information of the document
-    (such as meaning of acronyms, etc).
+    It accepts an extra_context string to include extra information of the
+    document (such as meaning of acronyms, etc).
     chunk_size and chunk_overlap are used to split the document.
     print_token_n_costs is used to include the number of tokens and price per
     query when using OpenAI.
     """
     total_cost = 0
     results_parent_folder_dict={}
-    if model_type == 'GPT4ALL':
-        callbacks = [StreamingStdOutCallbackHandler()]
-        llm = GPT4All(model=model_name, n_ctx=2048, temp=0, n_predict=500, 
-                      n_threads=n_threads, callbacks=callbacks, verbose=False)
-        if llm.backend == 'gptj':
-            chunk_size = 500
-            chunk_overlap = 50
+    chain_type="stuff"
+    query=  query_by_model_and_function(model_type, "notebook")
+    window_context = 4000 # default davinci OpenAI
+    if model_type == 'GPT4All':
+        window_context = 2048
+        #callbacks = [StreamingStdOutCallbackHandler()]
+        llm = GPT4All(model=model_name, temp=0.1, n_predict=256,
+                      callbacks=None, n_threads=n_threads, verbose=False)
+        print(f'Using {llm.backend} as backend')
+        #chain_type="map_reduce"
+        chunk_size = 1500
+        
     elif model_type == 'OpenAI':
         llm = OpenAI(temperature=0, max_tokens=500)
     elif model_type == 'FakeLLM':
         responses = generate_fake_responses(documents)
         llm = FakeListLLM(responses=list(responses.values()))
     else:
-        raise ValueError('incorrect model_type (only supports OpenAI|GPT4ALL|FakeLLM))')
-    for doc in documents:
+        raise ValueError('incorrect model_type (only supports OpenAI|GPT4All|FakeLLM))')
+    for full_doc in documents:
         text_splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size,
                                                 chunk_overlap=chunk_overlap,
-                                                separators =  ["\n\n"])
-        doc_split = text_splitter.split_documents([doc])
-        search_index = Chroma.from_documents(doc_split, embeddings,)
-        retriever = search_index.as_retriever(search_kwargs={"k": len(doc_split)})
+                                                separators =  ["\n\n", "\n"])
+        doc_split = text_splitter.split_documents([full_doc])
+        n_tokens =[]
+        for doc in doc_split:
+            doc.page_content = doc.page_content.replace("\n\n", "\n") 
+            # count number of tokens
+            n_tokens.append(num_tokens_from_string(doc.page_content, "p50k_base"))
+
+        if chain_type=="map_reduce":
+            k = len(doc_split)
+        else:
+            k = len(doc_split) if len(doc_split)<=4 else 4
+        total_tokens_worst_case = sum(sorted(n_tokens)[-k:])
+        if total_tokens_worst_case > window_context:
+            warning = f"WARNING: The number of tokens ({total_tokens_worst_case})"
+            warning += f" to use in the embedding search ({k} documents) is"
+            warning += f" likely greater that the window context ({window_context})."
+            warning += " This can lead to misleading results."
+            print(warning)
+
+        search_index = Chroma.from_documents(documents=doc_split, embedding=embeddings,)
+        
+        retriever = search_index.as_retriever(search_kwargs={"k": k})
         notebook_name = doc.metadata['source'].split('/')[-1]
         parent_folder = doc.metadata['parent_folder']
-        if context:
-            context = f"\n{context}\n"
+        if extra_context:
+            extra_context = f"\n{extra_context}\n"
         if parent_folder not in results_parent_folder_dict.keys():
               results_parent_folder_dict[parent_folder] = {}
-        query = f"The following code comes from the {notebook_name} Jupyter Notebook. Your task is to explain for what this code is used for. {context}\
-            Describe this using just one paragraph, including the location of the input and output files from the notebook if applicable. \
-            Use a bullet point for your response, which must be in markdown. You must dont add more information. Here is the initial part of your answer:\
-            - `{notebook_name}`: "
-        qa = RetrievalQA.from_chain_type(llm=llm, chain_type="stuff", retriever=retriever)
-        
+
+        query = query.format(notebook_name=notebook_name, 
+                             extra_context=extra_context)
+        qa = RetrievalQA.from_chain_type(llm=llm, chain_type=chain_type, retriever=retriever)
         #print(f'Working on {parent_folder}/{notebook_name}..')
         spinner = Halo(text=f'Working on {parent_folder}/{notebook_name}..', spinner='dots')
         spinner.start()
+        start_time = time.time()
         cb = None
         if model_type=='OpenAI' and print_token_n_costs:
             with get_openai_callback() as cb:
@@ -163,13 +191,22 @@ def retrieve_summary(documents: List[Document], embeddings: Embeddings, context:
                 total_cost += cb.total_cost
         elif model_type == 'FakeLLM':
             res = {'result' : responses[notebook_name]}
+        elif model_type == 'GPT4All':
+            res = qa(query)
+            res['result'] = res['result'].replace("\'", "'").replace("\\_", "_") 
+            res['result'] = f"\n- `{notebook_name}`: " + res['result']
         else:
             res = qa(query)
-        import time
         spinner.stop()
+
+        final_time = round((time.time()-start_time)/60,2) # as minutes
+        print(f'Running time: {final_time} min')
         if cb:
             print(cb)
-        
+
+        if 'ERROR: The prompt size exceeds' in res['result']:
+            print(res['result'])
+            exit()
         results_parent_folder_dict[parent_folder][notebook_name] = res['result']
         
     if total_cost > 0:
@@ -201,10 +238,9 @@ def summary_repo(llm: BaseLLM, summary_notebooks: str, repo_name: str,
     print_token_n_costs is used to include the number of tokens and price of
     the query when using OpenAI.
     """
-    query_repo = f"""The following is the summary of a list of notebooks used in a GitHub repository called `{repo_name}`:
-{summary_notebooks}
-What do you think is this repo used for? Don't explain me each notebook, just give me a summary of the repository that could be added to a readme.md file."""
-
+    query_repo =  query_by_model_and_function(model_type, "repo")
+    query_repo = query_repo.format(repo_name=repo_name, 
+                                   summary_notebooks=summary_notebooks)
     spinner = Halo(text=f'Summarizing repo..', spinner='dots')
     spinner.start()
     cb = None
@@ -237,3 +273,39 @@ def create_readme(repo_name: str, summary_notebooks: str, summary_repo: str) -> 
     markdown_file += f'{summary_repo}\n\nNotebooks info:\n'
     markdown_file += f'{summary_notebooks}'
     return markdown_file
+
+
+
+def query_by_model_and_function(model: str, to_summarize: str="notebook") -> str:
+    if to_summarize == "notebook":
+        if model == 'OpenAI' or model == 'FakeLLM':
+            query = "The following code comes from the {notebook_name} Jupyter Notebook."
+            query += " Your task is to explain for what this code is used for. {extra_context}"
+            query += "Describe it using just one paragraph, including the location of the input and output files from the notebook if applicable.\n"
+            query += "Use a bullet point for your response, which must be in markdown. "
+            query += "You must don't add more information. Here is the initial part of your answer:\n"
+            query += "- `{notebook_name}`: "
+        else:
+            query = f"Do a concise summary of what this code does and include the location of the files read and written if applicable"
+
+        return query
+        
+    elif to_summarize == "repo":
+        if model == 'OpenAI' or model == 'FakeLLM':
+            query = "The following is the summary of a list of notebooks used in a GitHub repository called `{repo_name}`:\n"
+            query += "{summary_notebooks}\n"
+            query += "What do you think is this repo used for? Don't explain me each notebook, just give me"
+            query += "a summary of the repository that could be added to a readme.md file."""
+        else:
+            query = "{summary_notebooks}\n"
+            query += "Do a concise summary of what these jupyter notebooks are used for"
+    return query
+
+
+def num_tokens_from_string(string: str, encoding_name: str) -> int:
+    """Returns the number of tokens in a text string."""
+    encoding = tiktoken.get_encoding(encoding_name)
+    num_tokens = len(encoding.encode(string))
+    return num_tokens
+
+
