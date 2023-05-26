@@ -38,7 +38,7 @@ options:
                         Number of threads to use, only if model==GPT4All
 ```
 
-You can check [`comparison_summary.md`](./example/comparison_summary.md) to check the usage of **summary_notebook.py** over `scipy/effect_size.ipynb` from [donnemartin/data-science-ipython-notebooks](https://github.com/donnemartin/data-science-ipython-notebooks) repo.
+[`comparison_summary.md`](./example/comparison_summary.md) has the results of using **summary_notebook.py** in the notebook `scipy/effect_size.ipynb` from [donnemartin/data-science-ipython-notebooks](https://github.com/donnemartin/data-science-ipython-notebooks) repo.
 
  -----
 ## Example
