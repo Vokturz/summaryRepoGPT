@@ -106,7 +106,7 @@ def main():
                                              model_type=args.model, print_token_n_costs=True)
     summary_notebooks = utils.format_summary(results_pf, repo_name)
     
-    print('Summarizing the repo..')
+    # print('Summarizing the repo..')
     summary_repo = utils.summary_repo(llm, summary_notebooks, repo_name, 
                                       model_type=args.model, print_token_n_costs=True)
     readme = utils.create_readme(repo_name, summary_notebooks, summary_repo)
