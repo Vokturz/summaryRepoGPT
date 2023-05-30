@@ -132,7 +132,9 @@ def retrieve_summary(documents: List[Document], embeddings: Embeddings, extra_co
         window_context = 2048
         #callbacks = [StreamingStdOutCallbackHandler()]
         llm = GPT4All(model=model_name, temp=0.1, n_predict=256,
-                      callbacks=None, n_threads=n_threads, verbose=False)
+                      callbacks=None, verbose=False)
+        # n_threads passed through GPT4All methods
+        llm.client.model.set_thread_count(n_threads)
         print(f'Using {llm.backend} as backend')
         #chain_type="map_reduce"
         chunk_size = 1500
@@ -287,7 +289,6 @@ def query_by_model_and_function(model: str, to_summarize: str="notebook") -> str
             query += "- `{notebook_name}`: "
         else:
             query = f"Do a concise summary of what this code does and include the location of the files read and written if applicable"
-
         return query
         
     elif to_summarize == "repo":
