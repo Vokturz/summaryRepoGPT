@@ -17,7 +17,7 @@ This repository contains two primary Python scripts, summary_repo.py and summary
 ### Repository Summarization: `summary_repo.py`
 This script generates summaries of each Jupyter notebook within a chosen repository. Here is how to use it:
 ```
-usage: summary_repo.py [-h] [--local LOCAL] [--model MODEL]
+usage: summary_repo.py [-h] [--local LOCAL] [--model MODEL] [--n-threads N_THREADS] [--gpu GPU]
 
 A description
 
@@ -26,9 +26,10 @@ options:
   --local LOCAL, -l LOCAL
                         If the repository has been already downloaded, you can pass the folder path
   --model MODEL, -m MODEL
-                        To use a preferred model (OpenAI, FakeLLM for testing, GPT4All)
+                        To use a preferred model (OpenAI, FakeLLM for testing, GPT4All, LlamaCpp)
   --n-threads N_THREADS, -t N_THREADS
-                        Number of threads to use, only if model==GPT4All
+                        Number of threads to use
+  --gpu GPU, -g GPU     To run using GPU (Only for LlamaCpp)
 ```
 
 "If no local repository is provided, it prompts the user to enter a repository and branch. All repositories are downloaded into the folder `repositories` folder.
@@ -39,7 +40,7 @@ By default the model runs with model `FakeLLM`, i.e., it generates a fake summar
 
 This script generates a summary for an individual Jupyter notebook. Here is how to use it:
 ```
-usage: summary_notebook.py [-h] --file FILE [--model MODEL] [--n-threads N_THREADS]
+usage: summary_notebook.py [-h] --file FILE [--model MODEL] [--n-threads N_THREADS] [--gpu GPU]
 
 A description
 
@@ -47,9 +48,16 @@ options:
   -h, --help            show this help message and exit
   --file FILE, -f FILE  Notebook path
   --model MODEL, -m MODEL
-                        To use a preferred model (OpenAI, FakeLLM for testing, GPT4All)
+                        To use a preferred model (OpenAI, FakeLLM for testing, GPT4All, LlamaCpp)
   --n-threads N_THREADS, -t N_THREADS
-                        Number of threads to use, only if model==GPT4All
+                        Number of threads to use
+  --gpu GPU, -g GPU     To run using GPU (Only for LlamaCpp)
+```
+
+## Enable GPU acceleration
+Currently, the tool supports the package 'llama.cpp' running on GPU. However, by default, the package `llama-cpp-python` does not include GPU support. To activate it, it must be installed from the terminal as follows:
+```bash
+CMAKE_ARGS="-DLLAMA_CUBLAS=on" FORCE_CMAKE=1 pip3 install llama-cpp-python --force-reinstall --upgrade --no-cache-dir
 ```
 ## Examples 🎯
 
@@ -76,10 +84,13 @@ GITHUB_TOKEN: GitHub token used to access to private repos.
 OPENAI_API_KEY= OpenAI API key
 GPT4ALL_MODEL= GPT4ALL model name (see https://gpt4all.io/models/models.json for all models)
 EMBEDDINGS_MODEL=all-MiniLM-L6-v2
+LLAMA_MODEL_PATH=models/wizardLM-7B.ggmlv3.q4_1.bin
+GGML_CUDA_NO_PINNED=1
 ```
 
 # To do list
 - [x] Make GPT4ALL work
 - [x] Improve notebook splitter
-- [ ] Add [llama.cpp](https://github.com/ggerganov/llama.cpp) support
+- [X] Add [llama.cpp](https://github.com/ggerganov/llama.cpp) support
+- [ ] Add benchmark table of different models
 - [ ] Add more files to summarize
