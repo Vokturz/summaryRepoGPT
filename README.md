@@ -17,7 +17,7 @@ This repository contains two primary Python scripts, summary_repo.py and summary
 ### Repository Summarization: `summary_repo.py`
 This script generates summaries of each Jupyter notebook within a chosen repository. Here is how to use it:
 ```
-usage: summary_repo.py [-h] [--local LOCAL] [--model MODEL] [--n-threads N_THREADS] [--gpu GPU]
+usage: summary_repo.py [-h] [--local LOCAL] [--model MODEL] [--n-threads N_THREADS] [--gpu | --no-gpu | -g]
 
 A description
 
@@ -29,7 +29,7 @@ options:
                         To use a preferred model (OpenAI, FakeLLM for testing, GPT4All, LlamaCpp)
   --n-threads N_THREADS, -t N_THREADS
                         Number of threads to use
-  --gpu GPU, -g GPU     To run using GPU (Only for LlamaCpp)
+  --gpu, --no-gpu, -g   To run using GPU (Only for LlamaCpp)
 ```
 
 "If no local repository is provided, it prompts the user to enter a repository and branch. All repositories are downloaded into the folder `repositories` folder.
@@ -40,7 +40,7 @@ By default the model runs with model `FakeLLM`, i.e., it generates a fake summar
 
 This script generates a summary for an individual Jupyter notebook. Here is how to use it:
 ```
-usage: summary_notebook.py [-h] --file FILE [--model MODEL] [--n-threads N_THREADS] [--gpu GPU]
+usage: summary_notebook.py [-h] --file FILE [--model MODEL] [--n-threads N_THREADS] [--gpu | --no-gpu | -g]
 
 A description
 
@@ -51,7 +51,7 @@ options:
                         To use a preferred model (OpenAI, FakeLLM for testing, GPT4All, LlamaCpp)
   --n-threads N_THREADS, -t N_THREADS
                         Number of threads to use
-  --gpu GPU, -g GPU     To run using GPU (Only for LlamaCpp)
+  --gpu, --no-gpu, -g   To run using GPU (Only for LlamaCpp)
 ```
 
 ## Enable GPU acceleration
@@ -94,3 +94,12 @@ GGML_CUDA_NO_PINNED=1
 - [X] Add [llama.cpp](https://github.com/ggerganov/llama.cpp) support
 - [ ] Add benchmark table of different models
 - [ ] Add more files to summarize
+
+
+## Possible problems
+1. Cannot install requirements? Check that you have  `gcc 11` compiler. If not, here how to install it
+```bash
+sudo apt install build-essential manpages-dev software-properties-common
+sudo add-apt-repository ppa:ubuntu-toolchain-r/test
+sudo apt update && sudo apt install gcc-11 g++-11
+```
