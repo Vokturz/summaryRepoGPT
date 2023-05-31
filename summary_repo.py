@@ -39,8 +39,8 @@ def user_repo_validation(answers, current):
 
 def main():
     args = parse_arguments()
-    if args.model not in ["GPT4All", "OpenAI", "FakeLLM"]:
-        print(f"Incorrect model {args.model}. Models supported: OpenAI|GPT4All|FakeLLM")
+    if args.model not in ["GPT4All", "OpenAI", "FakeLLM", "LlamaCpp"]:
+        print(f"Incorrect model {args.model}. Models supported: OpenAI|GPT4All|FakeLLM|LlamaCpp")
         exit()
     if not args.local:
         repo_question = inquirer.Text('user_repo', message="GitHub repository (user/repo)", validate=user_repo_validation),             
@@ -96,7 +96,7 @@ def main():
     print(f"Loaded {len(documents)} documents from {source_directory}")
 
     extra_context = ''
-    if args.model == 'OpenAI': # Context works only for OpenAI
+    if args.model == 'OpenAI' or 'LlamaCpp': # Context works only for OpenAI and LlamaCpp
         context_q = inquirer.Text('context', message="(Optional) Add some context (as meaning of acronyms, etc)", ),             
         extra_context = inquirer.prompt(context_q)['context']
         
@@ -104,9 +104,15 @@ def main():
         embeddings = FakeEmbeddings(size=4096)
     else:
         print(f'Loading embeddings from {embeddings_model_name}..')
-        embeddings = HuggingFaceEmbeddings(model_name=embeddings_model_name)
+        if args.gpu and args.model == 'LlamaCpp':
+            embeddings_kwargs = {'device': 'cuda'}
+        else:
+            embeddings_kwargs = {}
+        embeddings = HuggingFaceEmbeddings(model_name=embeddings_model_name,
+                                            model_kwargs=embeddings_kwargs)
 
-    llm, results_pf = utils.retrieve_summary(documents, embeddings, extra_context=extra_context, n_threads=args.n_threads,
+    llm, results_pf = utils.retrieve_summary(documents, embeddings, extra_context=extra_context,
+                                             n_threads=args.n_threads, use_gpu=args.gpu,
                                              model_type=args.model, print_token_n_costs=True)
     summary_notebooks = utils.format_summary(results_pf, repo_name)
     
@@ -120,9 +126,14 @@ def main():
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description='A description')
-    parser.add_argument("--local", "-l", help='If the repository has been already downloaded, you can pass the folder path')
-    parser.add_argument("--model", "-m", default='FakeLLM', help='To use a preferred model (OpenAI, FakeLLM for testing, GPT4All)')
-    parser.add_argument("--n-threads", "-t", type=int, default=4, help='Number of threads to use, only if model==GPT4All')
+    parser.add_argument("--local", "-l",
+                         help='If the repository has been already downloaded, you can pass the folder path')
+    parser.add_argument("--model", "-m", default='FakeLLM',
+                         help='To use a preferred model (OpenAI, FakeLLM for testing, GPT4All, LlamaCpp)')
+    parser.add_argument("--n-threads", "-t", type=int, default=4,
+                         help='Number of threads to use')
+    parser.add_argument("--gpu", "-g", type=bool, default=False,
+                        help='To run using GPU (Only for LlamaCpp)')
 
     return parser.parse_args()
 
