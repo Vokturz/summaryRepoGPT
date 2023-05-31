@@ -72,7 +72,16 @@ After generating summaries for all notebooks, the script compiles a comprehensiv
 
 ### `summary_notebook.py`
 
-For an example of using the `summary_notebook.py` script, refer to [`comparison_summary.md`](./example/comparison_summary.md). This file contains the results of summarizing the `scipy/effect_size.ipynb`notebook, again from the [donnemartin/data-science-ipython-notebooks](https://github.com/donnemartin/data-science-ipython-notebooks) repository.
+For an example of using the `summary_notebook.py` script, refer to [`comparison_summary.md`](./example/comparison_summary.md). This file contains the results of summarizing the `scipy/effect_size.ipynb`notebook, again from the [donnemartin/data-science-ipython-notebooks](https://github.com/donnemartin/data-science-ipython-notebooks) repository. The next table summarize these results
+
+|LLM|Model Name|Time [min]|URL|
+|-:|-:|-:|-:|
+|OpenAI|`text-davinci-003`| 0.3 |  [OpenAI/gpt-3-5](https://platform.openai.com/docs/models/gpt-3-5) |
+| LlamaCpp (GPU)| `wizardLM-7B.ggmlv3.q4_1`| 1.1 |[TheBloke/wizardLM-7B-GGML](https://huggingface.co/TheBloke/wizardLM-7B-GGML)
+| GPT4All | `ggml-gpt4all-j-v1.3-groovy` | 16.64 | [GPT4All website](https://gpt4all.io/index.html) |
+| GPT4All | `ggml-vicuna-13b-1.1-q4_2`   | 22.11 | [GPT4All website](https://gpt4all.io/index.html)|
+
+
 
 
 -----
@@ -92,7 +101,7 @@ GGML_CUDA_NO_PINNED=1
 - [x] Make GPT4ALL work
 - [x] Improve notebook splitter
 - [X] Add [llama.cpp](https://github.com/ggerganov/llama.cpp) support
-- [ ] Add benchmark table of different models
+- [x] Add benchmark table of different models
 - [ ] Add more files to summarize
 
 
