@@ -132,7 +132,7 @@ def parse_arguments():
                          help='To use a preferred model (OpenAI, FakeLLM for testing, GPT4All, LlamaCpp)')
     parser.add_argument("--n-threads", "-t", type=int, default=4,
                          help='Number of threads to use')
-    parser.add_argument("--gpu", "-g", type=bool, default=False,
+    parser.add_argument("--gpu", "-g", action=argparse.BooleanOptionalAction, default=False,
                         help='To run using GPU (Only for LlamaCpp)')
 
     return parser.parse_args()
