@@ -72,7 +72,7 @@ After generating summaries for all notebooks, the script compiles a comprehensiv
 
 ### `summary_notebook.py`
 
-For an example of using the `summary_notebook.py` script, refer to [`comparison_summary.md`](./example/comparison_summary.md). This file contains the results of summarizing the `scipy/effect_size.ipynb`notebook, again from the [donnemartin/data-science-ipython-notebooks](https://github.com/donnemartin/data-science-ipython-notebooks) repository. The next table summarize these results
+For an example of using the `summary_notebook.py` script, refer to [`comparison_summary.md`](./example/comparison_summary.md). This file contains the results of summarizing the `scipy/effect_size.ipynb` notebook, again from the [donnemartin/data-science-ipython-notebooks](https://github.com/donnemartin/data-science-ipython-notebooks) repository. The next table summarize these results
 
 |LLM|Model Name|Time [min]|URL|
 |-:|-:|-:|-:|
@@ -102,6 +102,7 @@ GGML_CUDA_NO_PINNED=1
 - [x] Improve notebook splitter
 - [X] Add [llama.cpp](https://github.com/ggerganov/llama.cpp) support
 - [x] Add benchmark table of different models
+- [ ] Add Streamlit GUI
 - [ ] Add more files to summarize
 
 
