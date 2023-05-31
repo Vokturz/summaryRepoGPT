@@ -32,7 +32,10 @@ def main():
     llm, results_pf = utils.retrieve_summary(documents, embeddings, n_threads=args.n_threads,
                                              use_gpu=args.gpu, model_type=args.model,
                                              print_token_n_costs=True)
-    print(results_pf)
+    parent_folder = list(results_pf.keys())[0]
+    notebook_name = list(results_pf[parent_folder].keys())[0]
+    output = results_pf[parent_folder][notebook_name]
+    print(f"{output}")
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description='A description')
@@ -41,7 +44,7 @@ def parse_arguments():
                          help='To use a preferred model (OpenAI, FakeLLM for testing, GPT4All, LlamaCpp)')
     parser.add_argument("--n-threads", "-t", type=int, default=4,
                          help='Number of threads to use')
-    parser.add_argument("--gpu", "-g", type=bool, default=False,
+    parser.add_argument("--gpu", "-g", action=argparse.BooleanOptionalAction, default=False,
                         help='To run using GPU (Only for LlamaCpp)')
     return parser.parse_args()
 
