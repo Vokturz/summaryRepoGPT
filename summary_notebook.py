@@ -29,21 +29,24 @@ def main():
             embeddings_kwargs = {}
         embeddings = HuggingFaceEmbeddings(model_name=embeddings_model_name,
                                             model_kwargs=embeddings_kwargs)
-    llm, results_pf = utils.retrieve_summary(documents, embeddings, n_threads=args.n_threads,
-                                             use_gpu=args.gpu, model_type=args.model,
-                                             print_token_n_costs=True)
+    seed = 10 # For chain_type 'stuff'
+    llm, results_pf = utils.retrieve_summary(documents, embeddings, n_threads=args.n_threads, chain_type=args.chain_type,
+                                             use_gpu=args.gpu, model_type=args.model, show_spinner=True, seed=10,
+                                             print_token_n_costs=True, extra_context="LLM refers to Large Language Models")
     parent_folder = list(results_pf.keys())[0]
     notebook_name = list(results_pf[parent_folder].keys())[0]
     output = results_pf[parent_folder][notebook_name]
-    print(f"{output}")
+    print(f"{output}\n")
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description='A description')
     parser.add_argument("--file", "-f", help='Notebook path', required=True)
     parser.add_argument("--model", "-m", default='FakeLLM',
-                         help='To use a preferred model (OpenAI, FakeLLM for testing, GPT4All, LlamaCpp)')
+                        help='To use a preferred model (OpenAI, FakeLLM for testing, GPT4All, LlamaCpp)')
+    parser.add_argument("--chain-type", "-c", default='stuff',
+                        help='Chain type to use (stuff|map_reduce)')
     parser.add_argument("--n-threads", "-t", type=int, default=4,
-                         help='Number of threads to use')
+                        help='Number of threads to use')
     parser.add_argument("--gpu", "-g", action=argparse.BooleanOptionalAction, default=False,
                         help='To run using GPU (Only for LlamaCpp)')
     return parser.parse_args()
