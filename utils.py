@@ -9,7 +9,7 @@ import requests
 from halo import Halo
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.docstore.document import Document
-from langchain.chains import RetrievalQA
+from langchain.chains.summarize import load_summarize_chain
 from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
 from langchain.vectorstores import Chroma
 from langchain.llms import (GPT4All, OpenAI, LlamaCpp)
@@ -17,6 +17,7 @@ from langchain.callbacks import get_openai_callback
 from langchain.llms.fake import FakeListLLM
 from langchain.embeddings.base import Embeddings
 from langchain.llms.base import BaseLLM
+from langchain import PromptTemplate
 import tiktoken
 import torch
 
@@ -24,6 +25,23 @@ load_dotenv()
 
 model_name = os.environ.get("GPT4ALL_MODEL")
 llama_model_path = os.environ.get("LLAMA_MODEL_PATH")
+
+languages_dict = {
+    'ipynb' : 'Jupyter Notebook',
+    'py' : 'Python'
+}
+
+n_context_model = {
+    'FakeLLM' : 4001,
+    'OpenAI' : 4001,  # default davinci OpenAI
+    'GPT4All' : 2048,
+    'LlamaCpp' : 2048
+}
+
+def get_language_file(file_name):
+    file_type = file_name.split('.')[-1]
+    return languages_dict[file_type]
+
 
 def clone_repository(user: str, repo: str, branch: str, token: Optional[str]=None) -> str:
     """Clone the branch of a GitHub repository using the user and repo names"""
@@ -63,7 +81,7 @@ def get_branches(user: str, repo: str, token: Optional[str]=None) -> List[str]:
     return branches
 
 
-def load_notebook(file_path: str) -> Document:
+def load_notebook(file_path: str, include_markdown=True) -> Document:
     """Load a .ipynb file as a langchain Document.
 
     It is similar to NotebookLoader but concatenates all code cells, markdown
@@ -79,12 +97,13 @@ def load_notebook(file_path: str) -> Document:
     full_source = []
     for cell in cells: 
         if cell['cell_type'] == 'markdown': # Add Markdown as comments
-            lines = cell['source'].splitlines()
-            commented_lines = ['# ' + line for line in lines]
-            full_source.append('\n'.join(commented_lines))
+            if include_markdown:
+                lines = cell['source'].splitlines()
+                commented_lines = ['# ' + line for line in lines]
+                full_source.append('<markdown>\n'.join(commented_lines))
         else:
             full_source.append(cell['source'])
-    full_source = '\n\n'.join(full_source)
+    full_source = '<code>\n'.join(full_source)
     doc = Document(page_content=full_source)
     doc.metadata['source'] = file_path
     parent_folder = '/'.join(file_path.split('/')[1:-1])
@@ -94,13 +113,13 @@ def load_notebook(file_path: str) -> Document:
     return doc
 
 
-def load_multiple_notebooks(source_dir: str, exclude_pattern: str='[!_]') -> List[Document]:
+def load_multiple_notebooks(source_dir: str, exclude_pattern: str='[!_]', include_markdown=True) -> List[Document]:
     """Convert all notebooks from a source_dir to langchain documents.
     It excludes all files starting with '_'.
     """
     ipynb_files = glob.glob(os.path.join(source_dir, f"{exclude_pattern}*.ipynb"), recursive=True)
-    all_files = ipynb_files
-    return [load_notebook(file_path) for file_path in all_files]
+    all_files = sorted(ipynb_files)
+    return [load_notebook(file_path, include_markdown) for file_path in all_files]
 
 
 def generate_fake_responses(documents: List[Document]) -> Dict[str, str]:
@@ -110,13 +129,14 @@ def generate_fake_responses(documents: List[Document]) -> Dict[str, str]:
     for doc in documents:
         var = 'foo' if random.randint(1,100) > 50 else 'bar'
         notebook_name = doc.metadata['source'].split('/')[-1]
-        responses[notebook_name] = f'\n - `{notebook_name}`: This notebooks is used for {var}.'
+        responses[notebook_name] = f' is used for {var}.'
     return responses
 
 
 def retrieve_summary(documents: List[Document], embeddings: Embeddings, extra_context: Optional[str]='',
-                      model_type: str='FakeLLM', chunk_size: int=2048, chunk_overlap: int=0, 
-                      n_threads: int=4, use_gpu: bool=False, print_token_n_costs: bool=False) -> Tuple[BaseLLM,  Dict[str, Dict[str, str]]]:
+                      model_type: str='FakeLLM', chunk_size: int=1500, chunk_overlap: int=0, n_ctx: Optional[int]=None,
+                      n_threads: int=4, use_gpu: bool=False, max_tokens: int=300, chain_type: str='stuff', seed: Optional[int]=None,
+                      show_spinner=True, print_token_n_costs: bool=False) -> Tuple[BaseLLM,  Dict[str, Dict[str, str]]]:
     """Obtain the summary of each document using the given LLM.
 
     It accepts an extra_context string to include extra information of the
@@ -127,68 +147,61 @@ def retrieve_summary(documents: List[Document], embeddings: Embeddings, extra_co
     """
     total_cost = 0
     results_parent_folder_dict={}
-    chain_type="stuff"
-    # Get the query for notebooks
-    query = query_by_model_and_function(model_type, "notebook")
-    window_context = 4001 # default davinci OpenAI
 
+    if chain_type == 'stuff':
+        chunk_size = 450
+    else:
+        chunk_size = 4000
+    # Get the prompt for code
+    prompt, combine_prompt = prompt_by_function(model_type, "code", chain_type)
+
+    if n_ctx is None:
+        n_ctx = n_context_model[model_type]
+
+    max_tokens_prompt = n_ctx - max_tokens
+    
     print(f"Loading {model_type} model")
     # GPT4All models
     if model_type == 'GPT4All':
-        window_context = 2048
         #callbacks = [StreamingStdOutCallbackHandler()]
-        llm = GPT4All(model=model_name, temp=0.1, n_predict=256,
-                      n_ctx=window_context, allow_download=True,
+        llm = GPT4All(model=model_name, temp=0, n_predict=min([256,max_tokens]),
+                      n_ctx=n_ctx, allow_download=True,
                       n_threads=n_threads, callbacks=None, verbose=False)
-        print(f'Using {llm.backend} as backend')
-        #chain_type="map_reduce"
-        chunk_size = 1500
     # OpenAI model
     elif model_type == 'OpenAI':
-        llm = OpenAI(temperature=0, max_tokens=500)
+        llm = OpenAI(temperature=0, max_tokens=max_tokens)
     # FakeLLM for testing purposes
     elif model_type == 'FakeLLM':
-        responses = generate_fake_responses(documents)
-        llm = FakeListLLM(responses=list(responses.values()))
+        pass
     # LlaMa models from LlamaCpp, it supports GPU usage
     elif model_type == 'LlamaCpp':
-        window_context = 2048
         n_gpu_layers = calculate_layer_count() if use_gpu else None
         llm = LlamaCpp(model_path=llama_model_path,  n_gpu_layers=n_gpu_layers,
-                        temperature=0, max_tokens=256, n_ctx=window_context,
+                        temperature=0, max_tokens=max_tokens, n_ctx=n_ctx,
                         n_threads=n_threads,  callbacks=None, verbose=False)
-        chunk_size = 1400
+        llm.client.verbose = False
     else:
-        raise ValueError('incorrect model_type (only supports OpenAI|GPT4All|LlamaCpp|FakeLLM))')
+        raise ValueError('Incorrect model_type (only supports OpenAI|GPT4All|LlamaCpp|FakeLLM))')
     
     # Split the documents
     for full_doc in documents:
         text_splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size,
                                                 chunk_overlap=chunk_overlap,
-                                                separators =  ["\n\n", "\n"])
+                                                separators =  [ "\n\n", "\n", "<markdown>\n", "<code>\n", ""])
         doc_split = text_splitter.split_documents([full_doc])
         n_tokens =[]
         for doc in doc_split:
             # remove extra break lines
+            doc.page_content = doc.page_content.replace("<markdown>\n", "\n") 
+            doc.page_content = doc.page_content.replace("<code>\n", "\n") 
             doc.page_content = doc.page_content.replace("\n\n", "\n") 
             # count number of tokens
             n_tokens.append(num_tokens_from_string(doc.page_content, "p50k_base"))
 
-        if chain_type=="map_reduce":
-            k = len(doc_split)
-        else:
-            k = len(doc_split) if len(doc_split)<=4 else 4
-        total_tokens_worst_case = sum(sorted(n_tokens)[-k:])
-        if total_tokens_worst_case > window_context:
-            warning = f"WARNING: The number of tokens ({total_tokens_worst_case})"
-            warning += f" to use in the embedding search ({k} documents) is"
-            warning += f" likely greater that the window context ({window_context})."
-            warning += " This can lead to misleading results."
-            print(warning)
-
-        # Create chromadb
-        search_index = Chroma.from_documents(documents=doc_split, embedding=embeddings,)
-        retriever = search_index.as_retriever(search_kwargs={"k": k})
+        # For testing cases only
+        if model_type == 'FakeLLM':
+            responses = list(generate_fake_responses(doc_split).values())
+            llm = FakeListLLM(responses=responses*100)
 
         # Document's metadata
         notebook_name = doc.metadata['source'].split('/')[-1]
@@ -196,34 +209,109 @@ def retrieve_summary(documents: List[Document], embeddings: Embeddings, extra_co
 
         # Add extra context
         if extra_context:
-            extra_context = f"\n{extra_context}\n"
+            extra_context = f"{extra_context}\n"
+
         if parent_folder not in results_parent_folder_dict.keys():
               results_parent_folder_dict[parent_folder] = {}
 
-        # Format the query
-        query = query.format(notebook_name=notebook_name, 
-                             extra_context=extra_context)
+    
+        file_type = get_language_file(notebook_name)   
+        prompt_partial = prompt.partial(file_name=notebook_name, 
+                                        file_type=file_type,
+                                        extra_context=extra_context)
         
-        qa = RetrievalQA.from_chain_type(llm=llm, chain_type=chain_type, retriever=retriever)
+        extra_tokens = num_tokens_from_string(prompt_partial.format(context=''), "p50k_base") 
+        extra_tokens += 150
+        import random # Random until I find a better method :c
+        random.seed(seed)
+        k = len(doc_split)
+        if k==1:
+            total_tokens = n_tokens[0]
+        elif k==2:
+            total_tokens = n_tokens[0] + n_tokens[-1]
+        else:
+            random_chunks = sorted(random.sample(range(1,len(doc_split)-1),k-2))
+            total_tokens = sum([n_tokens[0]] + [n_tokens[i] for i in random_chunks]  + [n_tokens[-1]])
+            total_tokens += extra_tokens
+        while total_tokens > max_tokens_prompt and k>1:
+            random_chunks = sorted(random.sample(range(1,len(doc_split)-1),k-2))
+            total_tokens = sum([n_tokens[0]] + [n_tokens[i] for i in random_chunks]  + [n_tokens[-1]])
+            total_tokens += extra_tokens
+            k-=1
+        if chain_type == 'map_reduce':
+            if k < len(doc_split):
+                # Format the prompt
+                combine_prompt_partial = combine_prompt.partial(file_name=notebook_name, 
+                                            file_type=file_type)  
+                chain = load_summarize_chain(llm, chain_type="map_reduce",
+                                            map_prompt=prompt_partial,
+                                            combine_prompt=combine_prompt_partial,
+                                            combine_document_variable_name="context",
+                                            map_reduce_document_variable_name="context")
+            else: # use stuff
+                print('Full file can be used as context, changing to chain_type=`stuff`')
+                print(f'Using {k} chunks out of {len(doc_split)}. Total Tokens={total_tokens + max_tokens}')
+                # Format the prompt
+                prompt_partial = prompt.partial(file_name=notebook_name, 
+                                        file_type=file_type,
+                                        extra_context=extra_context)
+                
+                if k >2:
+                    doc_split = [doc_split[0]] + [doc_split[i] for i in random_chunks]  + [doc_split[-1]]
+                chain = load_summarize_chain(llm, chain_type='stuff',
+                                            prompt=prompt_partial,
+                                            document_variable_name="context")     
+
+        else: # stuff     
+            # Obtain best k for stuff
+            #k = 0
+            #sorted_n_tokens = sorted(n_tokens)[::-1]
+            # total_tokens_worst_case = sorted_n_tokens[0]
+            # total_tokens_worst_case += extra_tokens # to be safe
+            # while total_tokens_worst_case<=max_tokens_prompt:
+            #     k+=1 
+            #     if k>=len(doc_split):
+            #         break
+            #     total_tokens_worst_case += sorted_n_tokens[k] 
+
+            # # include another chunk
+            # if k < len(doc_split): # total_tokens_worst_case + max_tokens < n_ctx 
+            #     k+=1
+            #     total_tokens_worst_case += max_tokens
+            # # print(f'Chunk size={chunk_size}, Total chunks={len(doc_split)}')
+            # print(f'Using {k} chunks out of {len(doc_split)}. Total Tokens (worst case)={total_tokens_worst_case}')
+
+            # Create chromadb
+            # search_index = Chroma.from_documents(documents=doc_split,
+            #                                     embedding=embeddings,)
+            # retriever = search_index.as_retriever(search_kwargs={"k": k})
+            # doc_split = retriever.get_relevant_documents(f'What {notebook_name} does')
+
+
+            print(f'Using {k} chunks out of {len(doc_split)}. Total Tokens={total_tokens + max_tokens}')
+            doc_split = [doc_split[0]] + [doc_split[i] for i in random_chunks]  + [doc_split[-1]]
+            chain = load_summarize_chain(llm, chain_type='stuff',
+                                        prompt=prompt_partial,
+                                        document_variable_name="context")
 
         # Start the query process
-        spinner = Halo(text=f'Working on {parent_folder}/{notebook_name}..', spinner='dots')
-        spinner.start()
+        if show_spinner:
+            spinner = Halo(text=f'Working on {parent_folder}/{notebook_name}.. ({chain_type} mode)', spinner='dots')
+            spinner.start()
         start_time = time.time()
         cb = None
         if model_type=='OpenAI' and print_token_n_costs:
             with get_openai_callback() as cb:
-                res = qa(query)
+                res = chain({"input_documents" : doc_split}, return_only_outputs=True)
                 total_cost += cb.total_cost
-        elif model_type == 'FakeLLM':
-            res = {'result' : responses[notebook_name]}
-        elif model_type in ['GPT4All', 'LlamaCpp']:
-            res = qa(query)
-            res['result'] = res['result'].replace("\'", "'").replace("\\_", "_") 
-            res['result'] = f"\n- `{notebook_name}`: " + res['result']
         else:
-            res = qa(query)
-        spinner.stop()
+            res = chain({"input_documents" : doc_split}, return_only_outputs=True)
+        if show_spinner:
+            spinner.stop()
+
+        output_var = 'output_text'
+        res[output_var] = res[output_var].replace("\'", "'").replace("\\_", "_").strip()
+        res[output_var] = f"\n- `{notebook_name}`: This {file_type} file {res[output_var]}"
 
         final_time = round((time.time()-start_time)/60,2) # as minutes
         print(f'Running time: {final_time} min')
@@ -231,12 +319,12 @@ def retrieve_summary(documents: List[Document], embeddings: Embeddings, extra_co
             print(cb)
 
         # Should not happen
-        if 'ERROR: The prompt size exceeds' in res['result']:
-            print(res['result'])
+        if 'ERROR: The prompt size exceeds' in res[output_var]:
+            print(res[output_var])
             exit()
         
         # Save results by parent_folder and notebook name
-        results_parent_folder_dict[parent_folder][notebook_name] = res['result']
+        results_parent_folder_dict[parent_folder][notebook_name] = res[output_var]
 
     # Print total cost, only for OpenAI API 
     if total_cost > 0:
@@ -257,8 +345,7 @@ def format_summary(summary_notebooks_results: Dict[str, Dict[str, str]], repo_na
     for parent_folder in summary_notebooks_results.keys():
         llm_results = list(summary_notebooks_results[parent_folder].values())
         parent_folder = parent_folder.replace(f'{repo_name}/', '')
-        if parent_folder != ".":
-            summary_notebooks += f'**{parent_folder}** folder:'
+        summary_notebooks += f'**{parent_folder}** folder:'
         summary_notebooks += ''.join(llm_results) + '\n\n'
     return summary_notebooks
 
@@ -270,27 +357,26 @@ def summary_repo(llm: BaseLLM, summary_notebooks: str, repo_name: str,
     print_token_n_costs is used to include the number of tokens and price of
     the query when using OpenAI.
     """
-    # Get the query for the repository summary
-    query_repo =  query_by_model_and_function(model_type, "repo")
-    query_repo = query_repo.format(repo_name=repo_name, 
-                                   summary_notebooks=summary_notebooks)
+    # Get the prompt for the repository summary
+    prompt_repo, _ =  prompt_by_function(model_type, "repo")
+    prompt_repo = prompt_repo.format(repo_name=repo_name, 
+                                     summary_notebooks=summary_notebooks)
     # Start query process
     spinner = Halo(text=f'Summarizing repo..', spinner='dots')
     spinner.start()
     cb = None
+    if model_type == 'FakeLLM':
+        llm = FakeListLLM(responses=['contains code for foo'])
     if model_type=='OpenAI' and print_token_n_costs:
         with get_openai_callback() as cb:
-            summary_repo = llm(query_repo)
-    elif model_type == 'FakeLLM':
-            summary_repo = 'This repo contains notebooks for foo'
+            summary_repo = llm(prompt_repo)
     else:
-        summary_repo = llm(query_repo)
+        summary_repo = llm(prompt_repo)
     spinner.stop()
     if cb:
         print(cb)
 
-    if model_type not in ['OpenAI', 'FakeLLM']:
-        summary_repo = "This repository " + summary_repo[1:]
+    summary_repo = "This repository " + summary_repo.strip()
     return summary_repo
 
 
@@ -300,48 +386,70 @@ def create_readme(repo_name: str, summary_notebooks: str, summary_repo: str) -> 
     # <repo_name>
     <summary of the repository>
 
-    Notebooks info:
+    Folders info:
     **<parent_folder>** folder:
         - 00_notebook.ipynb : ...
     and so on.
     """
     markdown_file = ""
     markdown_file += f"# {repo_name}\n"
-    markdown_file += f'{summary_repo}\n\nNotebooks info:\n'
+    markdown_file += f'{summary_repo}\n\nFolders info:\n'
     markdown_file += f'{summary_notebooks}'
     return markdown_file
 
 
 
-def query_by_model_and_function(model: str, to_summarize: str="notebook") -> str:
-    if to_summarize == "notebook":
-        if model in ['OpenAI', 'FakeLLM']:
-            query = "The following code comes from the {notebook_name} Jupyter Notebook."
-            query += " Your task is to explain for what this code is used for. {extra_context}"
-            query += "Describe it using just one paragraph, including the location of the input and output files from the notebook if applicable.\n"
-            query += "Use a bullet point for your response, which must be in markdown. "
-            query += "You must don't add more information. Here is the initial part of your answer:\n"
-            query += "- `{notebook_name}`: "
-        elif model == 'LlamaCpp':
-            query = "The following code comes from the {notebook_name} Jupyter Notebook. {extra_context}"
-            query += "Do a concise summary of what this code does and include the location of the files read and written if applicable."     
-        else:
-            query = "Do a concise summary of what this code does. If the code read or write files, include the location of these files."
-            query += "{extra_context}"
-        return query
+def prompt_by_function(model: str, to_summarize: str="code", chain_type: str="stuff") -> str:
+    if chain_type=="stuff":
+        if to_summarize == "code":
+            prompt = (
+                '\n\n"{context}"\n\n'
+                "These are parts of the code from `{file_name}` {file_type} file. {extra_context}"
+                "Your task is to understand and explain for what this code is used for, in a very general way."
+                "Question: Conceptualize this code, making a concise summary of what it does."
+                "Helpful Answer: This {file_type} file "
+                )
+            prompt = PromptTemplate(template=prompt, input_variables=["context", "file_name",
+                                                                      "file_type", "extra_context"])
+            return prompt, None
+            
         
-    elif to_summarize == "repo":
-        if model in ['OpenAI', 'FakeLLM']:
-            query = "The following is the summary of a list of notebooks used in a GitHub repository called `{repo_name}`:"
-            query += "{summary_notebooks}"
-            query += "What do you think is this repo used for? Don't explain me each notebook, just give me"
-            query += " a summary of the repository that could be added to a readme.md file."""
-        else:
-            query = "This is a list of the summarized notebooks from the GitHub repository called `{repo_name}`:"
-            query += "{summary_notebooks}"
-            query += "Based on this information, a concise summary of what this repository is used for is that it "
-    return query
+    elif chain_type=='map_reduce':
+        if to_summarize == "code":
+            map_prompt = (
+                '\n\n"{context}"\n\n'
+                "This code comes from `{file_name}` {file_type} file."
+                "{extra_context}"
+                "Question: Make a very concise summary of what it does, using no more than 50 words."
+                "Concise summary: This {file_type} file "
+                )
+            
+            combine_prompt = (
+                "These are summaries of different parts of what the `{file_name}` {file_type} file does. This file:"
+                '\n\n"{context}"\n\n'
+                "Your task is to do a final summary of the file in just one paragraph"
+                "Question: Conceptualize this code, making a concise summary of what it does."
+                "Helpful Answer: This {file_type} file "
+            )
+            map_prompt = PromptTemplate(template=map_prompt,
+                                        input_variables=["context", "file_name",
+                                                         "file_type", "extra_context"])
+            combine_prompt = PromptTemplate(template=combine_prompt,
+                                            input_variables=["context",
+                                                             "file_name",
+                                                             "file_type"])
+            return map_prompt, combine_prompt
 
+    if to_summarize == "repo":
+        prompt = (
+            "This is a list of the summarized files from the GitHub repository called `{repo_name}`:"
+            "{summary_notebooks}"
+            "What do you think is this repo used for? Don't explain me each notebook, just give me a summary of the repository that could be added to a README.md file."
+            "Concise summary: This repository "
+            )
+        prompt = PromptTemplate(template=prompt, input_variables=["repo_name", "summary_notebooks"])
+        return prompt, None
+        
 
 def num_tokens_from_string(string: str, encoding_name: str) -> int:
     """Returns the number of tokens in a text string."""

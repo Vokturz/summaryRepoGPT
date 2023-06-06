@@ -70,24 +70,28 @@ def main():
     source_directory = repo_folder
     repo_name = repo_folder.split('/')[-1]
 
-    ipynb_files = glob.glob(os.path.join(repo_folder, f"**/[!_]*.ipynb"), recursive=True)
-    parent_folders = ['/'.join(file_path.split('/')[1:-1]) for file_path in ipynb_files]
-    unique_parent_folders, total_documents = np.unique(parent_folders, return_counts=True)
-    unique_parent_folders = [pf.replace(f'{repo_name}/', '') for pf in unique_parent_folders]
-    ipynb_count = []
-    
-    for p, t in zip(unique_parent_folders,total_documents):
-       
-        ipynb_count.append(f' {t} files from {p}')
-    q = [inquirer.Checkbox("selected_parent_folders", message="Select .ipynb folder files to summarize",
-                           choices=tuple(zip(ipynb_count, unique_parent_folders )),
-                           #default=unique_parent_folders
-                           )]
-    answers = inquirer.prompt(q)
-    selected_parent_folders = answers["selected_parent_folders"]
-    if len(selected_parent_folders) == 0:
-        print('No folder was selected')
-        return
+    if not args.current:
+        ipynb_files = glob.glob(os.path.join(repo_folder, f"**/[!_]*.ipynb"), recursive=True)
+        parent_folders = ['/'.join(file_path.split('/')[1:-1]) for file_path in ipynb_files]
+        unique_parent_folders, total_documents = np.unique(parent_folders, return_counts=True)
+        unique_parent_folders = [pf.replace(f'{repo_name}/', '').replace(f'{repo_name}', '.') for pf in unique_parent_folders]
+        ipynb_count = []
+        
+        for p, t in zip(unique_parent_folders,total_documents):
+            ipynb_count.append(f' {t} .ipynb files from {p}')
+
+        q = [inquirer.Checkbox("selected_parent_folders", message="Select folder files to summarize",
+                            choices=tuple(zip(ipynb_count, unique_parent_folders )),
+                            #default=unique_parent_folders
+                            )]
+        answers = inquirer.prompt(q)
+        selected_parent_folders = answers["selected_parent_folders"]
+        if len(selected_parent_folders) == 0:
+            print('No folder was selected')
+            return  
+    else:
+        selected_parent_folders = '.'
+
     documents = []
     for spf in selected_parent_folders:
         source_dir = f'{source_directory}/{spf}'
@@ -96,7 +100,7 @@ def main():
     print(f"Loaded {len(documents)} documents from {source_directory}")
 
     extra_context = ''
-    if args.model == 'OpenAI' or 'LlamaCpp': # Context works only for OpenAI and LlamaCpp
+    if args.extra_context:
         context_q = inquirer.Text('context', message="(Optional) Add some context (as meaning of acronyms, etc)", ),             
         extra_context = inquirer.prompt(context_q)['context']
         
@@ -111,9 +115,11 @@ def main():
         embeddings = HuggingFaceEmbeddings(model_name=embeddings_model_name,
                                             model_kwargs=embeddings_kwargs)
 
+    seed = 10 # For chain_type 'stuff'
     llm, results_pf = utils.retrieve_summary(documents, embeddings, extra_context=extra_context,
-                                             n_threads=args.n_threads, use_gpu=args.gpu,
-                                             model_type=args.model, print_token_n_costs=True)
+                                             chain_type=args.chain_type, n_threads=args.n_threads,
+                                             use_gpu=args.gpu, seed=seed, model_type=args.model,
+                                             print_token_n_costs=True)
     summary_notebooks = utils.format_summary(results_pf, repo_name)
     
     # print('Summarizing the repo..')
@@ -130,11 +136,16 @@ def parse_arguments():
                          help='If the repository has been already downloaded, you can pass the folder path')
     parser.add_argument("--model", "-m", default='FakeLLM',
                          help='To use a preferred model (OpenAI, FakeLLM for testing, GPT4All, LlamaCpp)')
+    parser.add_argument("--chain-type", default='stuff',
+                        help='Chain type to use (stuff|map_reduce)')   
     parser.add_argument("--n-threads", "-t", type=int, default=4,
                          help='Number of threads to use')
     parser.add_argument("--gpu", "-g", action=argparse.BooleanOptionalAction, default=False,
                         help='To run using GPU (Only for LlamaCpp)')
-
+    parser.add_argument("--current", "-c", action=argparse.BooleanOptionalAction, default=False,
+                        help='Run over current folder, only if local is defined')
+    parser.add_argument("--extra-context", action=argparse.BooleanOptionalAction, default=True,
+                        help='To ask for extra context')
     return parser.parse_args()
 
 if __name__ == "__main__":
