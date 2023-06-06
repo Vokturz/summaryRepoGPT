@@ -308,7 +308,7 @@ def retrieve_summary(documents: List[Document], embeddings: Embeddings, extra_co
             res = chain({"input_documents" : doc_split}, return_only_outputs=True)
         if show_spinner:
             spinner.stop()
-
+        print(f'{parent_folder}/{notebook_name} summary finished!')
         output_var = 'output_text'
         res[output_var] = res[output_var].replace("\'", "'").replace("\\_", "_").strip()
         res[output_var] = f"\n- `{notebook_name}`: This {file_type} file {res[output_var]}"
