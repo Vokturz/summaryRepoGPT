@@ -95,7 +95,7 @@ def main():
     documents = []
     for spf in selected_parent_folders:
         source_dir = f'{source_directory}/{spf}'
-        documents.extend(utils.load_multiple_notebooks(source_dir))
+        documents.extend(utils.load_multiple_notebooks(source_dir, include_markdown=args.markdown))
     
     print(f"Loaded {len(documents)} documents from {source_directory}")
 
@@ -145,7 +145,9 @@ def parse_arguments():
     parser.add_argument("--current", "-c", action=argparse.BooleanOptionalAction, default=False,
                         help='Run over current folder, only if local is defined')
     parser.add_argument("--extra-context", action=argparse.BooleanOptionalAction, default=True,
-                        help='To ask for extra context')
+                        help='To ask for extra context (default True)')
+    parser.add_argument("--markdown", action=argparse.BooleanOptionalAction, default=True,
+                        help='To use or not the markdown from notebooks (default True)')
     return parser.parse_args()
 
 if __name__ == "__main__":

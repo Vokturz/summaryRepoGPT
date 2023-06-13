@@ -17,7 +17,7 @@ def main():
         print(f"Incorrect model {args.model}. Models supported: OpenAI|GPT4All|FakeLLM|LlamaCpp")
         exit()
     notebook_file = args.file
-    documents = [utils.load_notebook(notebook_file)]
+    documents = [utils.load_notebook(notebook_file, include_markdown=args.markdown)]
    
     print(f'Loading embeddings from {embeddings_model_name}..')
     if args.model == 'FakeLLM':
@@ -31,8 +31,8 @@ def main():
                                             model_kwargs=embeddings_kwargs)
     seed = 10 # For chain_type 'stuff'
     llm, results_pf = utils.retrieve_summary(documents, embeddings, n_threads=args.n_threads, chain_type=args.chain_type,
-                                             use_gpu=args.gpu, model_type=args.model, show_spinner=True, seed=10,
-                                             print_token_n_costs=True, extra_context="LLM refers to Large Language Models")
+                                             use_gpu=args.gpu, model_type=args.model, show_spinner=True, seed=seed,
+                                             print_token_n_costs=True, extra_context=args.extra_content)
     parent_folder = list(results_pf.keys())[0]
     notebook_name = list(results_pf[parent_folder].keys())[0]
     output = results_pf[parent_folder][notebook_name]
@@ -49,6 +49,10 @@ def parse_arguments():
                         help='Number of threads to use')
     parser.add_argument("--gpu", "-g", action=argparse.BooleanOptionalAction, default=False,
                         help='To run using GPU (Only for LlamaCpp)')
+    parser.add_argument("--extra-content", "-e", default='',
+                        help='Include extra content to the prompt' )
+    parser.add_argument("--markdown", action=argparse.BooleanOptionalAction, default=True,
+                        help='To use or not the markdown from notebooks (default True)')
     return parser.parse_args()
 
 if __name__ == "__main__":
