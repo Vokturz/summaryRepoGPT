@@ -405,9 +405,9 @@ def prompt_by_function(model: str, to_summarize: str="code", chain_type: str="st
             prompt = (
                 '\n\n"{context}"\n\n'
                 "These are parts of the code from `{file_name}` {file_type} file. {extra_context}"
-                "Your task is to understand and explain for what this code is used for, in a very general way."
-                "Question: Conceptualize this code, making a concise summary of what it does."
-                "Helpful Answer: This {file_type} file "
+                " Your task is to understand and explain for what this code is used for, in a very general way."
+                "\nQuestion: Conceptualize this code, making a concise summary of what it does."
+                "\nHelpful Answer: This file "
                 )
             prompt = PromptTemplate(template=prompt, input_variables=["context", "file_name",
                                                                       "file_type", "extra_context"])
@@ -418,18 +418,17 @@ def prompt_by_function(model: str, to_summarize: str="code", chain_type: str="st
         if to_summarize == "code":
             map_prompt = (
                 '\n\n"{context}"\n\n'
-                "This code comes from `{file_name}` {file_type} file."
-                "{extra_context}"
-                "Question: Make a very concise summary of what it does, using no more than 50 words."
-                "Concise summary: This {file_type} file "
+                "This code comes from `{file_name}` {file_type} file. {extra_context}"
+                "\nQuestion: Make a very concise summary of what it does, using no more than 50 words."
+                "\nConcise summary: This file "
                 )
             
             combine_prompt = (
                 "These are summaries of different parts of what the `{file_name}` {file_type} file does. This file:"
                 '\n\n"{context}"\n\n'
                 "Your task is to do a final summary of this file."
-                "Question: Conceptualize this code, making a concise summary of what it does in just one paragraph."
-                "Helpful Answer: This {file_type} file "
+                "\nQuestion: Conceptualize this code, making a concise summary of what it does in just one paragraph."
+                "\nHelpful Answer: This file "
             )
             map_prompt = PromptTemplate(template=map_prompt,
                                         input_variables=["context", "file_name",
@@ -445,7 +444,7 @@ def prompt_by_function(model: str, to_summarize: str="code", chain_type: str="st
             "This is a list of the summarized files from the GitHub repository called `{repo_name}`:"
             "{summary_notebooks}"
             "What do you think is this repo used for? Don't explain me each notebook, just give me a summary of the repository that could be added to a README.md file."
-            "Concise summary: This repository "
+            "\nConcise summary: This repository "
             )
         prompt = PromptTemplate(template=prompt, input_variables=["repo_name", "summary_notebooks"])
         return prompt, None
