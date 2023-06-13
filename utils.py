@@ -165,7 +165,7 @@ def retrieve_summary(documents: List[Document], embeddings: Embeddings, extra_co
     if model_type == 'GPT4All':
         #callbacks = [StreamingStdOutCallbackHandler()]
         llm = GPT4All(model=model_name, temp=0, n_predict=min([256,max_tokens]),
-                      n_ctx=n_ctx, allow_download=True,
+                      n_ctx=n_ctx, allow_download=True, n_batch=8,
                       n_threads=n_threads, callbacks=None, verbose=False)
     # OpenAI model
     elif model_type == 'OpenAI':
@@ -177,7 +177,7 @@ def retrieve_summary(documents: List[Document], embeddings: Embeddings, extra_co
     elif model_type == 'LlamaCpp':
         n_gpu_layers = calculate_layer_count() if use_gpu else None
         llm = LlamaCpp(model_path=llama_model_path,  n_gpu_layers=n_gpu_layers,
-                        temperature=0, max_tokens=max_tokens, n_ctx=n_ctx,
+                        temperature=0, max_tokens=max_tokens, n_ctx=n_ctx, n_batch=1024,
                         n_threads=n_threads,  callbacks=None, verbose=False)
         llm.client.verbose = False
     else:
@@ -427,8 +427,8 @@ def prompt_by_function(model: str, to_summarize: str="code", chain_type: str="st
             combine_prompt = (
                 "These are summaries of different parts of what the `{file_name}` {file_type} file does. This file:"
                 '\n\n"{context}"\n\n'
-                "Your task is to do a final summary of the file in just one paragraph"
-                "Question: Conceptualize this code, making a concise summary of what it does."
+                "Your task is to do a final summary of this file."
+                "Question: Conceptualize this code, making a concise summary of what it does in just one paragraph."
                 "Helpful Answer: This {file_type} file "
             )
             map_prompt = PromptTemplate(template=map_prompt,
@@ -476,8 +476,8 @@ def calculate_layer_count() -> int:
     LAYERS_TO_REDUCE = 6 # About 700 MB is needed for the LLM to run, so we reduce the layer count by 6 to be safe.
     gpu_memory = get_gpu_memory()
     gpu_memory -= 1024 # 1GB free for security
-    if (gpu_memory//LAYER_SIZE_MB) - LAYERS_TO_REDUCE > 32:
-        return 32
+    if (gpu_memory//LAYER_SIZE_MB) - LAYERS_TO_REDUCE > 40:
+        return 40
     else:
         return (gpu_memory//LAYER_SIZE_MB-LAYERS_TO_REDUCE)
     
